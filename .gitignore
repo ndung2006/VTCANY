@@ -16,5 +16,3 @@ __pycache__/
 .idea/
 .vscode/
 storage/
-*.mp4
-*.ts

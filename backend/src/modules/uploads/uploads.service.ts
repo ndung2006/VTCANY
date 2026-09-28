@@ -1,0 +1,149 @@
+import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'fs';
+import { join } from 'path';
+import { Readable } from 'stream';
+import { UploadRecord, UploadStatus, planUpload } from './upload.plan';
+import { chunkExists, finalPath, rawDir, storageRootDefault, writeChunk } from './local-store';
+
+export function existsLocalUpload(root: string, uploadId: string): boolean {
+  return existsSync(rawDir(root, uploadId));
+}
+
+// In-memory records. Len Postgres: bang media_assets (Pending/Processing/Done/Error).
+@Injectable()
+export class UploadsService {
+  private records = new Map<string, UploadRecord>();
+  private s3: S3Client | null = null;
+  private bucket: string;
+
+  constructor(private config: ConfigService) {
+    const endpoint = this.config.get<string>('S3_ENDPOINT', '');
+    const region = this.config.get<string>('S3_REGION', 'ap-southeast-1');
+    const accessKey = this.config.get<string>('S3_ACCESS_KEY', '');
+    const secretKey = this.config.get<string>('S3_SECRET_KEY', '');
+    this.bucket = this.config.get<string>('S3_BUCKET', 'vtc-any-raw');
+    if (endpoint && accessKey && secretKey) {
+      this.s3 = new S3Client({
+        endpoint,
+        region,
+        forcePathStyle: true,
+        credentials: { accessKeyId: accessKey, secretAccessKey: secretKey },
+      });
+    }
+  }
+
+  async init(filename: string, sizeBytes: number, contentType: string, videoId?: string) {
+    const rec = planUpload(filename, sizeBytes, contentType, videoId);
+    this.records.set(rec.id, rec);
+    // Phase 1: local disk. Co S3_ENDPOINT: ky PUT that (duong dan len S3 sau).
+    if (this.s3) {
+      const key = `raw/${rec.id}/${filename}`;
+      const url = await getSignedUrl(
+        this.s3,
+        new PutObjectCommand({ Bucket: this.bucket, Key: key, ContentType: rec.contentType }),
+        { expiresIn: 3600 },
+      );
+      return { ...rec, key, method: 'single-put' as const, url };
+    }
+    const root = this.storageRoot();
+    mkdirSync(rawDir(root, rec.id), { recursive: true });
+    return {
+      ...rec,
+      method: 'local-chunks' as const,
+      // CMS PUT nhi phan tung chunk (application/octet-stream), khong qua JSON API.
+      chunkUrlTemplate: `/api/v1/storage-local/raw/${rec.id}/chunks/{n}`,
+      finalizeUrl: `/api/v1/uploads/${rec.id}/complete`,
+    };
+  }
+
+  storageRoot(): string {
+    return this.config.get<string>('STORAGE_DIR', '') || storageRootDefault();
+  }
+
+  async putChunk(id: string, n: number, stream: Readable): Promise<{ chunk: number; received: boolean }> {
+    this.get(id); // 404 neu khong ton tai
+    if (!Number.isInteger(n) || n < 0) throw new Error('invalid chunk index');
+    await writeChunk(this.storageRoot(), id, n, stream);
+    return { chunk: n, received: true };
+  }
+
+  // Gop chunk -> file raw duy nhat, san sang worker doc tai cho.
+  finalizeLocal(id: string): UploadRecord & { localPath: string } {
+    const rec = this.get(id);
+    if (rec.status !== 'pending') throw new Error(`invalid transition ${rec.status} -> uploaded`);
+    const root = this.storageRoot();
+    for (let n = 0; n < rec.chunks; n++) {
+      if (!chunkExists(root, id, n)) throw new Error(`missing chunk ${n}/${rec.chunks}`);
+    }
+    void this.mergeChunks(root, id, rec.filename);
+    rec.status = 'uploaded';
+    return { ...rec, localPath: finalPath(root, id, rec.filename) };
+  }
+
+  get(id: string): UploadRecord {
+    const rec = this.records.get(id);
+    if (!rec) throw new Error('upload not found');
+    return rec;
+  }
+
+  // Browser bao upload xong (hoac storage webhook) -> chuyen Uploaded, san sang worker.
+  // Local: gop chunk truoc. S3: file da nam tren bucket.
+  complete(id: string): UploadRecord & { localPath?: string } {
+    const rec = this.get(id);
+    const root = this.storageRoot();
+    if (existsLocalUpload(root, id)) {
+      const fin = this.finalizeLocal(id);
+      this.markProcessing(id);
+      return { ...fin, status: 'processing' as const };
+    }
+    this.markUploaded(id);
+    this.markProcessing(id);
+    return { ...rec, status: 'processing' as const };
+  }
+
+  markUploaded(id: string): UploadRecord {
+    return this.transition(id, 'pending', 'uploaded');
+  }
+
+  markProcessing(id: string): UploadRecord {
+    return this.transition(id, 'uploaded', 'processing');
+  }
+
+  markDone(id: string): UploadRecord {
+    return this.transition(id, 'processing', 'done');
+  }
+
+  markError(id: string): UploadRecord {
+    const rec = this.get(id);
+    rec.status = 'error';
+    return rec;
+  }
+
+  checkWebhookSecret(provided: string): boolean {
+    const expected = this.config.get<string>('MEDIA_WEBHOOK_SECRET', '');
+    if (!expected) return false;
+    return provided === expected;
+  }
+
+  private mergeChunks(root: string, uploadId: string, filename: string): string {
+    const out = finalPath(root, uploadId, filename);
+    writeFileSync(out, Buffer.alloc(0));
+    const rec = this.get(uploadId);
+    for (let n = 0; n < rec.chunks; n++) {
+      const part = join(rawDir(root, uploadId), `chunk-${n}`);
+      appendFileSync(out, readFileSync(part));
+      unlinkSync(part);
+    }
+    return out;
+  }
+
+  private transition(id: string, from: UploadStatus, to: UploadStatus): UploadRecord {
+    const rec = this.get(id);
+    if (rec.status !== from) throw new Error(`invalid transition ${rec.status} -> ${to}`);
+    rec.status = to;
+    return rec;
+  }
+}
