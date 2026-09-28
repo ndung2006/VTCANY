@@ -1,0 +1,24 @@
+// Phase 1 schema note: runtime dung in-memory, Prisma thay store o Phase 1.1 ma khong doi API.
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(uuid())
+  username     String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+}
+
+model Video {
+  id        String   @id @default(uuid())
+  title     String
+  channel   String   @default("PHUTHO")
+  status    String   @default("draft") // draft|pending|published|rejected
+  createdAt DateTime @default(now())
+}

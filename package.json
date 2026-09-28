@@ -1,0 +1,17 @@
+{
+  "name": "vtc-any",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "backend",
+    "frontend",
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:backend": "npm run dev -w backend",
+    "dev:frontend": "npm run dev -w frontend",
+    "build:all": "npm run build -ws",
+    "lint:all": "npm run lint -ws"
+  }
+}
