@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../../lib/api';
+import { HlsPlayer } from '../../components/hls-player';
 
 export default function LivePage() {
   const [url, setUrl] = useState('');
@@ -9,7 +10,6 @@ export default function LivePage() {
 
   async function mint() {
     try {
-      // api() tu login + refresh, gap 403 het han thi mint lai ngay.
       const t = await api('/playback/token', {
         method: 'POST',
         body: JSON.stringify({ type: 'live', slug: 'PHUTHO', ttlMinutes: 10 }),
@@ -19,12 +19,7 @@ export default function LivePage() {
       timer.current = setTimeout(mint, (t.ttl_seconds * 1000 * 2) / 3);
       setInfo(`Da cap link, tu refresh sau ${Math.round((t.ttl_seconds * 2) / 3)}s.`);
     } catch (e: any) {
-      if (String(e?.message).includes('forbidden')) {
-        setInfo('Link het han giua chung - mint lai ngay.');
-        await mint();
-      } else {
-        setInfo(`Loi: ${e?.message}`);
-      }
+      setInfo(`Loi: ${e?.message}`);
     }
   }
 
@@ -35,7 +30,7 @@ export default function LivePage() {
       <h1>Live PHUTHO</h1>
       <p>{info}</p>
       <button onClick={mint}>Play</button>
-      {url && <video src={url} controls autoPlay style={{ width: '100%', maxWidth: 720, marginTop: 12 }} />}
+      {url && <HlsPlayer key={url} src={url} />}
     </main>
   );
 }

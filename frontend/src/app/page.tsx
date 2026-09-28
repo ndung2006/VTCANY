@@ -1,6 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { api } from '../lib/api';
+import { HlsPlayer } from '../components/hls-player';
 
 export default function Home() {
   const [url, setUrl] = useState('');
@@ -27,7 +28,7 @@ export default function Home() {
       {url && (
         <>
           <p style={{ wordBreak: 'break-all' }}>{url}</p>
-          <video src={url} controls autoPlay style={{ width: '100%', maxWidth: 720 }} />
+          <HlsPlayer key={url} src={url} />
         </>
       )}
     </main>
