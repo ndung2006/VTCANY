@@ -12,12 +12,14 @@ export default function LivePage() {
     try {
       const t = await api('/playback/token', {
         method: 'POST',
-        body: JSON.stringify({ type: 'live', slug: 'PHUTHO', ttlMinutes: 10 }),
+        body: JSON.stringify({ type: 'live', slug: 'PHUTHO', ttlMinutes: 240 }),
       });
       setUrl(t.hls_url);
       clearTimeout(timer.current);
-      timer.current = setTimeout(mint, (t.ttl_seconds * 1000 * 2) / 3);
-      setInfo(`Da cap link, tu refresh sau ${Math.round((t.ttl_seconds * 2) / 3)}s.`);
+      // Docs 25-VTC-ANY: TTL 240p, xin lai cham nhat phut 210.
+      const waitMs = t.ttl_seconds > 3600 ? (t.ttl_seconds - 1800) * 1000 : (t.ttl_seconds * 1000 * 2) / 3;
+      timer.current = setTimeout(mint, waitMs);
+      setInfo(`Da cap link TTL ${Math.round(t.ttl_seconds / 60)} phut, tu xin lai sau ${Math.round(waitMs / 60000)} phut.`);
     } catch (e: any) {
       setInfo(`Loi: ${e?.message}`);
     }

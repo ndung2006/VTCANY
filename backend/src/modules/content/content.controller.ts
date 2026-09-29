@@ -6,6 +6,7 @@ import { RequirePerms } from '../auth/permissions.decorator';
 import { ContentService } from './content.service';
 import { EpgService } from './epg.service';
 import { AuditService } from '../audit/audit.service';
+import { PlaybackService } from '../playback/playback.service';
 
 class CreateVideoDto {
   @IsString()
@@ -38,6 +39,7 @@ export class ContentController {
     private content: ContentService,
     private epgService: EpgService,
     private audit: AuditService,
+    private playback: PlaybackService,
   ) {}
 
   private actor(req: any) {
@@ -104,10 +106,19 @@ export class ContentController {
 
   @RequirePerms('epg:read')
   @Get('channels/:slug/epg')
-  getEpg(@Param('slug') slug: string, @Query('date') date?: string) {
+  async getEpg(@Param('slug') slug: string, @Query('date') date?: string) {
+    // epgNow tu AIO de app hien now/next; timeline local van la nguon CMS nhap tay.
+    // AIO loi -> van tra timeline local (khong vo trang EPG).
+    let epgNow: unknown = null;
+    try {
+      epgNow = await this.playback.channelNow(slug);
+    } catch {
+      epgNow = null;
+    }
     return {
       channel: { name: slug.toUpperCase(), slug },
       date: date || 'default',
+      epgNow,
       timeline: this.epgService.get(slug, date),
     };
   }

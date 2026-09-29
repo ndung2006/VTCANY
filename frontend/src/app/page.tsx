@@ -5,13 +5,13 @@ import { HlsPlayer } from '../components/hls-player';
 
 export default function Home() {
   const [url, setUrl] = useState('');
-  const [msg, setMsg] = useState('Phase 1: login 1 lan, session tu gia han.');
+  const [msg, setMsg] = useState('Link xoay TTL 240 phut theo docs VTCAIO.');
 
   async function play() {
     try {
       const tokenRes = await api('/playback/token', {
         method: 'POST',
-        body: JSON.stringify({ type: 'live', slug: 'PHUTHO', ttlMinutes: 10 }),
+        body: JSON.stringify({ type: 'live', slug: 'PHUTHO', ttlMinutes: 240 }),
       });
       setUrl(tokenRes.hls_url);
       setMsg(`Token TTL ${tokenRes.ttl_seconds}s - refresh o 2/3 TTL, gap 403 thi mint lai.`);

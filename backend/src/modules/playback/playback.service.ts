@@ -1,22 +1,44 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { buildHlsUrl, clampTtlMinutes, signToken } from './hls-sign.util';
+import { clampTtlMinutes, fullUrl, getChannels, mintToken, toMasterUrl } from './aio-client';
 
 @Injectable()
 export class PlaybackService {
   constructor(private config: ConfigService) {}
 
-  mint(channel: string, ttlMinutes?: number) {
-    const secret = this.config.get<string>('VTC_HLS_SECRET', '');
-    if (!secret) throw new Error('VTC_HLS_SECRET is not configured (server-only)');
-    const baseUrl = this.config.get<string>('MEDIA_BASE_URL', 'https://vtcaio.vtctech.xyz');
-    const ttl = clampTtlMinutes(ttlMinutes ?? Number(this.config.get('PLAYBACK_TTL_MINUTES', 10)));
-    const exp = Date.now() + ttl * 60 * 1000;
-    const token = signToken(secret, channel, exp);
+  private cfg() {
     return {
-      hls_url: buildHlsUrl(baseUrl, channel, token, exp),
-      exp,
+      baseUrl: this.config.get<string>('MEDIA_BASE_URL', 'https://vtcaio.vtctech.xyz'),
+      partnerKey: this.config.get<string>('VTC_PARTNER_KEY', ''),
+    };
+  }
+
+  // Link xoay TTL 240 phut theo docs 25-VTC-ANY. FE xin lai cham nhat phut 210.
+  async mint(channel: string, ttlMinutes?: number) {
+    const cfg = this.cfg();
+    const ttl = clampTtlMinutes(ttlMinutes ?? Number(this.config.get('PLAYBACK_TTL_MINUTES', 240)));
+    const t = await mintToken(cfg, channel, ttl);
+    return {
+      hls_url: fullUrl(cfg.baseUrl, toMasterUrl(t.url)),
+      exp: t.exp,
       ttl_seconds: ttl * 60,
     };
+  }
+
+  async listChannels() {
+    const { baseUrl, channels } = await getChannels(this.cfg());
+    return {
+      baseUrl,
+      channels: channels
+        .filter((c) => c.live && c.status === 'RUNNING')
+        .map((c) => ({ name: c.name, epgId: c.epgId ?? null, epgNow: c.epgNow ?? null })),
+    };
+  }
+
+  // epgNow de app hien now/next khong can goi them. Null khi kenh chua map EPG.
+  async channelNow(slug: string) {
+    const { channels } = await getChannels(this.cfg());
+    const found = channels.find((c) => c.name.toUpperCase() === slug.toUpperCase());
+    return found?.epgNow ?? null;
   }
 }
