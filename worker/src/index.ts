@@ -9,6 +9,10 @@ const SECRET = process.env.MEDIA_WEBHOOK_SECRET || '';
 const STORAGE = process.env.STORAGE_DIR || join(process.cwd(), '..', 'storage');
 const POLL_MS = Number(process.env.POLL_MS || 10000);
 
+// Job dang transcode thi poll sau bo qua - tranh de ffmpeg chong chat
+// khi file lon transcode lau hon chu ky poll.
+const busy = new Set<string>();
+
 async function tick() {
   let jobs: any[];
   try {
@@ -23,6 +27,8 @@ async function tick() {
     return;
   }
   for (const job of jobs) {
+    if (busy.has(job.id)) continue;
+    busy.add(job.id);
     // eslint-disable-next-line no-console
     console.log(`[worker] transcode ${job.id} (${job.filename})`);
     try {
@@ -43,6 +49,8 @@ async function tick() {
         headers: { 'Content-Type': 'application/json', 'x-webhook-secret': SECRET },
         body: JSON.stringify({ uploadId: job.id, status: 'error' }),
       }).catch(() => undefined);
+    } finally {
+      busy.delete(job.id);
     }
   }
 }
