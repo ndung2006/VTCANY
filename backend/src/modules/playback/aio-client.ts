@@ -25,9 +25,10 @@ export function clampTtlMinutes(v: number): number {
   return Math.min(1440, Math.max(5, Math.floor(v)));
 }
 
-// Master multibitrate: thay index.m3u8 = master.m3u8, giu nguyen token+exp.
+// Master multibitrate: /hls/<CH>/index.m3u8 -> /api/hls/<CH>/master.m3u8 (docs 14 §7),
+// giu nguyen token+exp.
 export function toMasterUrl(path: string): string {
-  return path.replace(/index\.m3u8([?#]|$)/, 'master.m3u8$1');
+  return path.replace(/^\/hls\/([^/]+)\/index\.m3u8([?#]|$)/, '/api/hls/$1/master.m3u8$2');
 }
 
 export function fullUrl(baseUrl: string, path: string): string {

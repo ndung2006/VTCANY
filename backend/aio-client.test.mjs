@@ -6,10 +6,10 @@ function mockFetch(handler) {
   globalThis.fetch = handler;
 }
 
-test('master url swaps index->master keeping query', () => {
+test('master url moves to /api/hls keeping query', () => {
   assert.equal(
     toMasterUrl('/hls/PHUTHO/index.m3u8?token=abc&exp=123'),
-    '/hls/PHUTHO/master.m3u8?token=abc&exp=123',
+    '/api/hls/PHUTHO/master.m3u8?token=abc&exp=123',
   );
 });
 
@@ -30,7 +30,7 @@ test('mint posts channel+ttl and builds full master url', async () => {
   assert.equal(seen.body.channel, 'PHUTHO');
   assert.equal(seen.body.ttlMinutes, 240);
   assert.equal(seen.auth, 'Bearer k');
-  assert.equal(fullUrl('https://vtcaio.vtctech.xyz', toMasterUrl(t.url)), 'https://vtcaio.vtctech.xyz/hls/PHUTHO/master.m3u8?token=t&exp=9');
+  assert.equal(fullUrl('https://vtcaio.vtctech.xyz', toMasterUrl(t.url)), 'https://vtcaio.vtctech.xyz/api/hls/PHUTHO/master.m3u8?token=t&exp=9');
 });
 
 test('401 maps to invalid partner key', async () => {
