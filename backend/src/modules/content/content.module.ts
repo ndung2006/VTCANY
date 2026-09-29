@@ -5,9 +5,10 @@ import { EpgService } from './epg.service';
 import { AuthModule } from '../auth/auth.module';
 import { AuditModule } from '../audit/audit.module';
 import { PlaybackModule } from '../playback/playback.module';
+import { UploadsModule } from '../uploads/uploads.module';
 
 @Module({
-  imports: [AuthModule, AuditModule, PlaybackModule],
+  imports: [AuthModule, AuditModule, PlaybackModule, UploadsModule],
   controllers: [ContentController],
   providers: [ContentService, EpgService],
   exports: [ContentService, EpgService],

@@ -8,6 +8,7 @@ import { EpgService } from './epg.service';
 import { AuditService } from '../audit/audit.service';
 import { PlaybackService } from '../playback/playback.service';
 import { mapEpgSchedule } from '../playback/aio-client';
+import { UploadsService } from '../uploads/uploads.service';
 
 class CreateVideoDto {
   @IsString()
@@ -41,6 +42,7 @@ export class ContentController {
     private epgService: EpgService,
     private audit: AuditService,
     private playback: PlaybackService,
+    private uploads: UploadsService,
   ) {}
 
   private actor(req: any) {
@@ -57,6 +59,20 @@ export class ContentController {
   @Post('videos')
   create(@Body() dto: CreateVideoDto) {
     return this.content.create(dto.title, dto.channel);
+  }
+
+  @RequirePerms('video:read')
+  @Get('videos/:id/play')
+  play(@Param('id') id: string) {
+    this.content.get(id); // 404 neu video khong ton tai
+    try {
+      return { video_id: id, ...this.uploads.videoPlay(id) };
+    } catch {
+      throw new HttpException(
+        { error: { code: 'vod_not_ready', message: 'video chua co ban HLS (upload/transcode chua xong)' } },
+        HttpStatus.NOT_FOUND,
+      );
+    }
   }
 
   @RequirePerms('video:read')

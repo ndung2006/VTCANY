@@ -48,6 +48,13 @@ async function refresh(): Promise<Tokens> {
   return t;
 }
 
+// Headers co Bearer (login/refresh tu dong) cho cac fetch thu cong (upload nhi phan...).
+export async function authHeaders(): Promise<Record<string, string>> {
+  let tokens = load();
+  if (!tokens) tokens = await login('admin', 'admin123');
+  return { Authorization: `Bearer ${tokens.access_token}` };
+}
+
 // Fetch co auth + tu retry 1 lan sau refresh. Loi tra ve envelope { error: { code, message } }.
 export async function api(path: string, init: RequestInit = {}, retried = false): Promise<any> {
   let tokens = load();

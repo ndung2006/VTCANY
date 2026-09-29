@@ -73,6 +73,15 @@ export class UploadsController {
     }
   }
 
+  // Hang cho worker poll (secret guard, khong JWT).
+  @Get('internal/transcode-queue')
+  queue(@Headers('x-webhook-secret') secret: string) {
+    if (!this.uploads.checkWebhookSecret(secret || '')) {
+      throw new HttpException('forbidden', HttpStatus.FORBIDDEN);
+    }
+    return this.uploads.pendingTranscode();
+  }
+
   // Webhook tu storage/FFmpeg cu. Guard bang shared secret, khong dung JWT.
   @Post('internal/media-webhook')
   webhook(@Headers('x-webhook-secret') secret: string, @Body() body: any) {
@@ -81,7 +90,10 @@ export class UploadsController {
     }
     const { uploadId, status } = body || {};
     if (!uploadId) throw new HttpException('uploadId required', HttpStatus.BAD_REQUEST);
-    if (status === 'done') return this.uploads.markDone(uploadId);
+    if (status === 'done') {
+      this.uploads.markDone(uploadId);
+      return this.uploads.setVideoReady(uploadId);
+    }
     if (status === 'error') return this.uploads.markError(uploadId);
     try {
       return this.uploads.get(uploadId);

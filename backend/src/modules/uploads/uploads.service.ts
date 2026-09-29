@@ -16,6 +16,7 @@ export function existsLocalUpload(root: string, uploadId: string): boolean {
 @Injectable()
 export class UploadsService {
   private records = new Map<string, UploadRecord>();
+  private videoHls = new Map<string, { uploadId: string; hlsPath: string }>();
   private s3: S3Client | null = null;
   private bucket: string;
 
@@ -120,6 +121,29 @@ export class UploadsService {
     const rec = this.get(id);
     rec.status = 'error';
     return rec;
+  }
+
+  // Worker poll job dang cho transcode (kem localPath de worker doc tai cho).
+  pendingTranscode(): Array<UploadRecord & { localPath: string }> {
+    const root = this.storageRoot();
+    return [...this.records.values()]
+      .filter((r) => r.status === 'processing')
+      .map((r) => ({ ...r, localPath: finalPath(root, r.id, r.filename) }));
+  }
+
+  // Webhook done: map video -> HLS path de /videos/:id/play tra link phat.
+  // Quy uoc chung voi worker: storage/hls/<uploadId>/master.m3u8 -> /media/<uploadId>/master.m3u8
+  setVideoReady(uploadId: string): { hlsPath: string } {
+    const rec = this.get(uploadId);
+    const hlsPath = `/media/${uploadId}/master.m3u8`;
+    if (rec.videoId) this.videoHls.set(rec.videoId, { uploadId, hlsPath });
+    return { hlsPath };
+  }
+
+  videoPlay(videoId: string): { hls_path: string } {
+    const m = this.videoHls.get(videoId);
+    if (!m) throw new Error('vod not ready');
+    return { hls_path: m.hlsPath };
   }
 
   checkWebhookSecret(provided: string): boolean {

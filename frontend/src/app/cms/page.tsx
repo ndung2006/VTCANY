@@ -1,12 +1,46 @@
 'use client';
 import { useState } from 'react';
-import { api } from '../../lib/api';
+import { api, authHeaders } from '../../lib/api';
+
+const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+const CHUNK = 5 * 1024 * 1024;
 
 export default function CmsPage() {
   const [items, setItems] = useState<any[]>([]);
   const [meta, setMeta] = useState<any>(null);
   const [title, setTitle] = useState('Ban tin toi');
-  const [msg, setMsg] = useState('Nhap lieu -> Kiem duyet -> Xuat ban.');
+  const [msg, setMsg] = useState('Nhap lieu -> upload file -> Kiem duyet -> Xuat ban.');
+  const [uploadId, setUploadId] = useState('');
+  const [progress, setProgress] = useState('');
+
+  async function uploadFile(videoId: string, file: File) {
+    try {
+      setProgress('Xin upload...');
+      const init = await api('/uploads/init', {
+        method: 'POST',
+        body: JSON.stringify({ filename: file.name, sizeBytes: file.size, contentType: file.type || 'video/mp4', videoId }),
+      });
+      const n = init.chunks;
+      for (let i = 0; i < n; i++) {
+        setProgress(`Dang gui chunk ${i + 1}/${n}...`);
+        const blob = file.slice(i * CHUNK, (i + 1) * CHUNK);
+        const h = await authHeaders();
+        const res = await fetch(`${API}/storage-local/raw/${init.id}/chunks/${i}`, {
+          method: 'PUT',
+          headers: { ...h, 'Content-Type': 'application/octet-stream' },
+          body: blob,
+        });
+        if (!res.ok) throw new Error(`chunk ${i} failed`);
+      }
+      setProgress('Gop file + day transcode...');
+      await api(`/uploads/${init.id}/complete`, { method: 'POST' });
+      setUploadId(init.id);
+      setProgress(`Xong upload ${init.id} - worker dang transcode, xem duoc o /videos/${videoId} khi xong.`);
+      await refresh();
+    } catch (e: any) {
+      setProgress(`Loi upload: ${e?.message}`);
+    }
+  }
 
   async function refresh(page = 1) {
     try {
@@ -45,14 +79,24 @@ export default function CmsPage() {
       <button onClick={() => refresh()}>Tai lai</button>
       <ul>
         {items.map((v) => (
-          <li key={v.id}>
-            {v.title} [{v.status}]
+          <li key={v.id} style={{ marginBottom: 8 }}>
+            {v.title} [{v.status}] <a href={`/videos/${v.id}`}>Xem</a>
             <button onClick={() => act(v.id, 'submit')}>Trinh duyet</button>
             <button onClick={() => act(v.id, 'publish')}>Xuat ban</button>
             <button onClick={() => act(v.id, 'reject')}>Tu choi</button>
+            <input
+              type="file"
+              accept="video/*"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) void uploadFile(v.id, f);
+              }}
+            />
           </li>
         ))}
       </ul>
+      {progress && <p>{progress}</p>}
+      {uploadId && <p>Upload ID: {uploadId}</p>}
     </main>
   );
 }
