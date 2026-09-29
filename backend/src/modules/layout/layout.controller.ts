@@ -37,8 +37,10 @@ export class LayoutController {
     } catch {
       epgNow = null;
     }
+    const audioOnly = await this.playback.channelAudioOnly(name);
     return {
       channel: { name, slug },
+      audioOnly,
       epgNow,
       date: date || 'default',
       timeline: this.epg.get(name, date),

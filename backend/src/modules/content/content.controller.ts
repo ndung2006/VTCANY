@@ -7,6 +7,7 @@ import { ContentService } from './content.service';
 import { EpgService } from './epg.service';
 import { AuditService } from '../audit/audit.service';
 import { PlaybackService } from '../playback/playback.service';
+import { mapEpgSchedule } from '../playback/aio-client';
 
 class CreateVideoDto {
   @IsString()
@@ -121,6 +122,28 @@ export class ContentController {
       epgNow,
       timeline: this.epgService.get(slug, date),
     };
+  }
+
+  // Lich full tu AIO theo ngay (VD ?date=2026-09-29). Kenh chua cap EPG
+  // hoac AIO loi -> fallback timeline local.
+  @RequirePerms('epg:read')
+  @Get('channels/:slug/schedule')
+  async schedule(@Param('slug') slug: string, @Query('date') date?: string) {
+    const day = date || new Date().toISOString().slice(0, 10);
+    try {
+      const raw = await this.playback.channelSchedule(slug, day);
+      if (!raw) throw new Error('no aio schedule');
+      const timeline = mapEpgSchedule(raw);
+      if (timeline.length === 0) throw new Error('unmappable schedule');
+      return { channel: { name: slug.toUpperCase(), slug }, date: day, source: 'aio', timeline };
+    } catch {
+      return {
+        channel: { name: slug.toUpperCase(), slug },
+        date: day,
+        source: 'local',
+        timeline: this.epgService.get(slug, day),
+      };
+    }
   }
 
   @RequirePerms('epg:write')

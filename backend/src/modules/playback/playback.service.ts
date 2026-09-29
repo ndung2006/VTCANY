@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { clampTtlMinutes, fullUrl, getChannels, mintToken, toMasterUrl } from './aio-client';
+import { clampTtlMinutes, fullUrl, getChannels, getEpgSchedule, isAudioOnly, mintToken, toMasterUrl } from './aio-client';
 
 @Injectable()
 export class PlaybackService {
@@ -18,6 +18,9 @@ export class PlaybackService {
     const cfg = this.cfg();
     const ttl = clampTtlMinutes(ttlMinutes ?? Number(this.config.get('PLAYBACK_TTL_MINUTES', 240)));
     const t = await mintToken(cfg, channel, ttl);
+    // Log exp moi lan xin de doi soat 403 voi operator (docs 25 §5.4).
+    // eslint-disable-next-line no-console
+    console.log(`[playback] mint channel=${channel} exp=${new Date(t.exp).toISOString()} ttl=${ttl}m`);
     return {
       hls_url: fullUrl(cfg.baseUrl, toMasterUrl(t.url)),
       exp: t.exp,
@@ -31,7 +34,12 @@ export class PlaybackService {
       baseUrl,
       channels: channels
         .filter((c) => c.live && c.status === 'RUNNING')
-        .map((c) => ({ name: c.name, epgId: c.epgId ?? null, epgNow: c.epgNow ?? null })),
+        .map((c) => ({
+          name: c.name,
+          epgId: c.epgId ?? null,
+          epgNow: c.epgNow ?? null,
+          audioOnly: isAudioOnly(c),
+        })),
     };
   }
 
@@ -40,5 +48,24 @@ export class PlaybackService {
     const { channels } = await getChannels(this.cfg());
     const found = channels.find((c) => c.name.toUpperCase() === slug.toUpperCase());
     return found?.epgNow ?? null;
+  }
+
+  // Lich full theo ngay tu AIO (VD 82 chuong trinh/ngay). Tra null khi kenh chua cap EPG.
+  async channelSchedule(slug: string, date: string) {
+    const { channels } = await getChannels(this.cfg());
+    const found = channels.find((c) => c.name.toUpperCase() === slug.toUpperCase());
+    const scheduleUrl = found?.epg?.schedule;
+    if (!scheduleUrl) return null;
+    return getEpgSchedule(this.cfg(), scheduleUrl, date);
+  }
+
+  async channelAudioOnly(slug: string): Promise<boolean> {
+    try {
+      const { channels } = await getChannels(this.cfg());
+      const found = channels.find((c) => c.name.toUpperCase() === slug.toUpperCase());
+      return found ? isAudioOnly(found) : false;
+    } catch {
+      return false;
+    }
   }
 }
