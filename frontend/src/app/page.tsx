@@ -1,36 +1,75 @@
 'use client';
-import { useState } from 'react';
-import { api } from '../lib/api';
-import { HlsPlayer } from '../components/hls-player';
+import { useEffect, useState } from 'react';
+import Link from 'next/link';
+
+const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+
+interface Block {
+  order: number;
+  type: string;
+  title?: string;
+  items: Array<{ id: string; title: string; subtitle?: string; action: string; target_id: string }>;
+}
 
 export default function Home() {
-  const [url, setUrl] = useState('');
-  const [msg, setMsg] = useState('Link xoay TTL 240 phut theo docs VTCAIO.');
+  const [blocks, setBlocks] = useState<Block[]>([]);
+  const [msg, setMsg] = useState('Dang tai trang chu...');
 
-  async function play() {
-    try {
-      const tokenRes = await api('/playback/token', {
-        method: 'POST',
-        body: JSON.stringify({ type: 'live', slug: 'PHUTHO', ttlMinutes: 240 }),
-      });
-      setUrl(tokenRes.hls_url);
-      setMsg(`Token TTL ${tokenRes.ttl_seconds}s - refresh o 2/3 TTL, gap 403 thi mint lai.`);
-    } catch (e: any) {
-      setMsg(`Loi: ${e?.message}`);
-    }
-  }
+  useEffect(() => {
+    // Public API - khong can login.
+    fetch(`${API}/layout/home?platform=WEB`)
+      .then(async (r) => {
+        if (!r.ok) throw new Error('layout failed');
+        const data = await r.json();
+        setBlocks((data.layout_blocks || []).filter((b: Block) => b.items.length > 0));
+        setMsg('');
+      })
+      .catch((e) => setMsg(`Loi: ${e?.message}`));
+  }, []);
 
   return (
     <main style={{ padding: 24, fontFamily: 'sans-serif' }}>
-      <h1>VTC ANY - Phase 1 Live</h1>
-      <p>{msg}</p>
-      <button onClick={play}>Lay link Live PHUTHO</button>
-      {url && (
-        <>
-          <p style={{ wordBreak: 'break-all' }}>{url}</p>
-          <HlsPlayer key={url} src={url} />
-        </>
-      )}
+      <h1>VTC ANY</h1>
+      {msg && <p>{msg}</p>}
+      {blocks.map((b) => (
+        <section key={b.order} style={{ marginTop: 24 }}>
+          {b.type === 'BANNER_SLIDER' ? (
+            <div style={{ display: 'flex', gap: 12, overflowX: 'auto' }}>
+              {b.items.map((it) => (
+                <Link
+                  key={it.id}
+                  href={`/channels/${it.target_id}`}
+                  style={{ minWidth: 280, padding: 20, background: '#111', color: '#fff', borderRadius: 8, textDecoration: 'none' }}
+                >
+                  <b>{it.title}</b>
+                  <br />
+                  <small>{it.subtitle}</small>
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <>
+              <h2>{b.title}</h2>
+              <div style={{ display: 'flex', gap: 12, overflowX: 'auto' }}>
+                {b.items.map((it) => (
+                  <Link
+                    key={it.id}
+                    href={it.action === 'OPEN_CHANNEL' ? `/channels/${it.target_id}` : '#'}
+                    style={{ minWidth: 180, padding: 12, border: '1px solid #ccc', borderRadius: 8, textDecoration: 'none', color: 'inherit' }}
+                  >
+                    <b>{it.title}</b>
+                    <br />
+                    <small>{it.subtitle}</small>
+                  </Link>
+                ))}
+              </div>
+            </>
+          )}
+        </section>
+      ))}
+      <p style={{ marginTop: 32 }}>
+        <Link href="/live">Xem nhanh Live PHUTHO</Link> · <Link href="/cms">CMS duyet bai</Link>
+      </p>
     </main>
   );
 }

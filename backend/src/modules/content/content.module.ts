@@ -10,5 +10,6 @@ import { PlaybackModule } from '../playback/playback.module';
   imports: [AuthModule, AuditModule, PlaybackModule],
   controllers: [ContentController],
   providers: [ContentService, EpgService],
+  exports: [ContentService, EpgService],
 })
 export class ContentModule {}
