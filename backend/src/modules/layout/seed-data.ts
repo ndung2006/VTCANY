@@ -24,6 +24,7 @@ export interface RailItem {
   thumbnail: string;
   aspect: '3:2' | '3:4';
   is_premium: boolean;
+  type: 'phim' | 'video' | 'short';
 }
 
 export interface HomeBlockSeed {
@@ -52,6 +53,7 @@ interface RailDef {
   catId: string;
   cardAspect: '3:2' | '3:4';
   prefix: string;
+  itemType: 'phim' | 'video' | 'short';
   topics: string[];
 }
 
@@ -62,6 +64,7 @@ const RAILS: RailDef[] = [
     catId: '696891e96f1d98f16f5f7af2',
     cardAspect: '3:2',
     prefix: 'kickoff',
+    itemType: 'video',
     topics: ['Bóng đá', 'Thể thao', 'Bình luận', 'Highlight', 'Tin nóng', 'Phỏng vấn', 'Tập luyện', 'Góc nhìn'],
   },
   {
@@ -70,6 +73,7 @@ const RAILS: RailDef[] = [
     catId: seedHex('cat', 11),
     cardAspect: '3:2',
     prefix: 'checkin',
+    itemType: 'video',
     topics: ['Hà Nội', 'Huế', 'Đà Nẵng', 'TP.HCM', 'Phú Quốc', 'Sa Pa', 'Hội An', 'Nha Trang'],
   },
   {
@@ -78,6 +82,7 @@ const RAILS: RailDef[] = [
     catId: seedHex('cat', 12),
     cardAspect: '3:4',
     prefix: 'phimbo',
+    itemType: 'phim',
     topics: ['Thâm Tình', 'Mưa Bụi', 'Sóng Gió', 'Hương Vị', 'Đêm Trăng', 'Lối Về', 'Bến Xưa', 'Nắng Mới'],
   },
   {
@@ -86,6 +91,7 @@ const RAILS: RailDef[] = [
     catId: seedHex('cat', 13),
     cardAspect: '3:4',
     prefix: 'short',
+    itemType: 'short',
     topics: ['Hài ngắn', 'Ẩm thực', 'Du lịch', 'Âm nhạc', 'Thể thao', 'Phim ngắn', 'Vlog', 'Tin nhanh'],
   },
   {
@@ -94,6 +100,7 @@ const RAILS: RailDef[] = [
     catId: seedHex('cat', 14),
     cardAspect: '3:2',
     prefix: 'rap',
+    itemType: 'phim',
     topics: ['Hành động', 'Tình cảm', 'Hài', 'Kinh dị', 'Hoạt hình', 'Chiến tranh', 'Phiêu lưu', 'Tâm lý'],
   },
 ];
@@ -117,6 +124,7 @@ function buildRails(): HomeBlockSeed[] {
         thumbnail: thumb(`${rail.prefix}-${i}`, w, h),
         aspect: rail.cardAspect,
         is_premium: false,
+        type: rail.itemType,
       };
     }),
   }));

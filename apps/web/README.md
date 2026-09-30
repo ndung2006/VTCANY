@@ -1,6 +1,19 @@
-# apps/web — Web Client (Nuxt 3 ở Bước 3)
+# apps/web — Web Client (Nuxt 3 + Vue 3 + PrimeVue + Tailwind SSR, clone vtcplay.vn)
 
-> Placeholder Bước 1/8. Web hiện tại (`../../frontend/`, Next.js/React) được giữ
-> để không vỡ demo; Bước 3 sẽ khởi tạo Nuxt 3 + Vue 3 + PrimeVue + Tailwind SSR
-> tại đây theo đúng spec clone vtcplay.vn (sidebar, hero carousel, rail ngang,
-> routing sitemap mục 1.2, URL slug-24hex).
+## Chạy local
+```bash
+cd apps/web
+npm install
+cp .env.example .env
+npm run dev      # http://localhost:3000
+```
+
+Trỏ API khác: `NUXT_PUBLIC_API_BASE=https://api.vtcrd.top/api/v1 npm run dev`.
+
+## Cấu trúc
+- `layouts/default.vue` — sidebar trái (menu, tìm kiếm, QR, footer công ty)
+- `pages/index.vue` — trang chủ: HeroCarousel + rails từ `GET /layout/home`
+- `components/HeroCarousel.vue`, `components/RailCarousel.vue`
+- `utils/url.ts` — helper slug-24hex (copy từ packages/contracts để build độc lập)
+- Sitemap (Mục 1.2): `/phim`, `/short`, `/giai-tri`, `/truyen-hinh`,
+  `/danh-muc/[slugId]`, `/phim/[slugId]`, `/video/[slugId]`, `/short/[slugId]`, `/tim-kiem?s=`
