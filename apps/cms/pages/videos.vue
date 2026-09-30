@@ -114,7 +114,17 @@ async function act(v: any, action: string) {
 }
 async function showPlay(v: any) {
   playDlg.value = true; playInfo.value = null; playError.value = '';
-  try { playInfo.value = await api.get(`/videos/${v.id}/play`); }
+  try {
+    const info: any = await api.get(`/videos/${v.id}/play`);
+    // hls_path backend tra ve dang relative (/api/v1/...) -> ghep apiBase de co URL chay duoc
+    if (info?.hls_path?.startsWith('/')) {
+      const base = (useRuntimeConfig().public.apiBase as string || '').replace(/\/$/, '');
+      info.hls_url = base + info.hls_path;
+    } else if (info?.hls_path) {
+      info.hls_url = info.hls_path;
+    }
+    playInfo.value = info;
+  }
   catch { playError.value = 'Video chưa có bản HLS (upload/transcode chưa xong).'; }
 }
 onMounted(load);

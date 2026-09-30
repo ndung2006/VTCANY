@@ -37,7 +37,9 @@ test('chunk upload -> complete -> webhook done maps video to hls path', async ()
   svc.markDone(rec.id);
   const mapped = svc.setVideoReady(rec.id);
   assert.equal(mapped.hlsPath, `/media/${rec.id}/master.m3u8`);
-  assert.equal(svc.videoPlay('vid-9').hls_path, `/media/${rec.id}/master.m3u8`);
+  // videoPlay gio tra URL playlist KY HMAC (khong lo path static tran)
+  const play = svc.videoPlay('vid-9');
+  assert.match(play.hls_path, new RegExp(`^/api/v1/media/${rec.id}/playlist\\.m3u8\\?exp=\\d+&sig=[0-9a-f]{64}$`));
 });
 
 test('video without finished vod has no play link', () => {
@@ -62,4 +64,49 @@ test('bullmq enqueue fallback: khong co REDIS_URL -> false, complete van ok', as
   const { enqueueTranscode } = await import('./dist/modules/uploads/transcode-queue.js');
   delete process.env.REDIS_URL;
   assert.equal(await enqueueTranscode({ uploadId: 'u1', localPath: '/tmp/a.mp4', filename: 'a.mp4' }), false);
+});
+
+test('media-sign: ky/verify roundtrip, tu choi sig sai - het han - traversal', async () => {
+  const { signMedia, verifyMedia, isValidUploadId } = await import('./dist/modules/uploads/media-sign.js');
+  const exp = Math.floor(Date.now() / 1000) + 600;
+  const sig = signMedia('upl-123', exp);
+  assert.equal(verifyMedia('upl-123', String(exp), sig), true);
+  assert.equal(verifyMedia('upl-123', String(exp), sig.slice(0, -1) + '0'), false); // sig sai
+  assert.equal(verifyMedia('upl-999', String(exp), sig), false); // doi uploadId
+  assert.equal(verifyMedia('upl-123', String(Math.floor(Date.now() / 1000) - 1), signMedia('upl-123', Math.floor(Date.now() / 1000) - 1)), false); // het han
+  assert.equal(verifyMedia('../secret', String(exp), sig), false); // traversal
+  assert.equal(verifyMedia('upl-123', String(exp), undefined), false); // thieu sig
+  assert.equal(isValidUploadId('upl-1700000000000'), true);
+  assert.equal(isValidUploadId('../../etc'), false);
+});
+
+test('videoPlay tra URL playlist ky HMAC (khong con /media tran)', async () => {
+  const svc = svcWithTmp();
+  const r = await svc.init('s.mp4', 3, 'video/mp4', 'vid-sign');
+  await svc.putChunk(r.id, 0, Readable.from([Buffer.from('S')]));
+  svc.complete(r.id);
+  const ready = svc.setVideoReady(r.id);
+  assert.match(ready.hlsPath, /\/media\//);
+  const play = svc.videoPlay('vid-sign');
+  assert.match(play.hls_path, /\/api\/v1\/media\/.+\/playlist\.m3u8\?exp=\d+&sig=[0-9a-f]{64}/);
+  assert.ok(!play.hls_path.includes('master.m3u8'), 'khong lo duong dan static tran');
+});
+
+test('signedPlaylist viet lai segment thanh URL ky tuyet doi', async () => {
+  const { writeFileSync, mkdirSync } = await import('fs');
+  const svc = svcWithTmp();
+  const root = svc.storageRoot();
+  const uid = 'upl-seg1';
+  mkdirSync(join(root, 'hls', uid), { recursive: true });
+  writeFileSync(join(root, 'hls', uid, 'master.m3u8'),
+    '#EXTM3U\n#EXT-X-VERSION:3\n#EXTINF:6.0,\nseg0.ts\n#EXTINF:6.0,\nseg1.ts\n#EXT-X-ENDLIST\n');
+  const body = svc.signedPlaylist(uid, 'https://api.example.com');
+  assert.ok(body.includes('#EXTM3U'));
+  const segLines = body.split('\n').filter((l) => l.includes('/media/'));
+  assert.equal(segLines.length, 2);
+  for (const l of segLines) {
+    assert.match(l, new RegExp(`^https://api\\.example\\.com/media/${uid}/seg\\d\\.ts\\?exp=\\d+&sig=[0-9a-f]{64}$`));
+  }
+  assert.throws(() => svc.signedPlaylist('../x', 'https://api.example.com'), /invalid upload id/);
+  assert.throws(() => svc.signedPlaylist('upl-missing', 'https://api.example.com'), /playlist not found/);
 });

@@ -8,6 +8,7 @@ import { Readable } from 'stream';
 import { UploadRecord, UploadStatus, planUpload } from './upload.plan';
 import { chunkExists, finalPath, rawDir, storageRootDefault, writeChunk } from './local-store';
 import { enqueueTranscode } from './transcode-queue';
+import { PLAYLIST_TTL_SEC, SEGMENT_TTL_SEC, isValidUploadId, signMedia } from './media-sign';
 
 export function existsLocalUpload(root: string, uploadId: string): boolean {
   return existsSync(rawDir(root, uploadId));
@@ -150,7 +151,29 @@ export class UploadsService {
   videoPlay(videoId: string): { hls_path: string } {
     const m = this.videoHls.get(videoId);
     if (!m) throw new Error('vod not ready');
-    return { hls_path: m.hlsPath };
+    // URL ky HMAC han 15 phut - player khong can Bearer token.
+    const exp = Math.floor(Date.now() / 1000) + PLAYLIST_TTL_SEC;
+    const sig = signMedia(m.uploadId, exp);
+    return { hls_path: `/api/v1/media/${m.uploadId}/playlist.m3u8?exp=${exp}&sig=${sig}` };
+  }
+
+  /** Doc master.m3u8 va viet lai segment URL thanh URL ky rieng (han 8h). */
+  signedPlaylist(uploadId: string, baseUrl: string): string {
+    if (!isValidUploadId(uploadId)) throw new Error('invalid upload id');
+    const playlistPath = join(this.storageRoot(), 'hls', uploadId, 'master.m3u8');
+    if (!existsSync(playlistPath)) throw new Error('playlist not found');
+    const segExp = Math.floor(Date.now() / 1000) + SEGMENT_TTL_SEC;
+    const segSig = signMedia(uploadId, segExp);
+    return readFileSync(playlistPath, 'utf8')
+      .split('\n')
+      .map((line) => {
+        const t = line.trim();
+        if (!t || t.startsWith('#')) return line;
+        const seg = t.split('/').pop() || '';
+        if (!/^[A-Za-z0-9_.-]+$/.test(seg)) return line; // giu nguyen dong la
+        return `${baseUrl}/media/${uploadId}/${seg}?exp=${segExp}&sig=${segSig}`;
+      })
+      .join('\n');
   }
 
   checkWebhookSecret(provided: string): boolean {

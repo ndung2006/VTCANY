@@ -6,6 +6,7 @@ import { join } from 'path';
 import { mkdirSync } from 'fs';
 import { AppModule } from './app.module';
 import { ApiExceptionFilter } from './common/api-exception.filter';
+import { verifyMedia } from './modules/uploads/media-sign';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { bodyParser: false });
@@ -18,6 +19,19 @@ async function bootstrap() {
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   app.useGlobalFilters(new ApiExceptionFilter());
   // Serve file local: /media/<file> <- storage/hls (VOD sau transcode).
+  // BAT BUOC co chu ky HMAC hop le (?exp=&sig=) - chan hotlink truc tiep.
+  // Middleware chay TRUOC static assets (dang ky truoc = chay truoc).
+  express.use('/media', (req: any, res: any, next: any) => {
+    const uploadId = (req.path as string).split('/').filter(Boolean)[0] || '';
+    const { exp, sig } = (req.query || {}) as { exp?: string; sig?: string };
+    if (!verifyMedia(uploadId, exp, sig)) {
+      res.status(403).json({
+        error: { code: 'media_forbidden', message: 'URL phat media het han hoac khong hop le' },
+      });
+      return;
+    }
+    next();
+  });
   const hlsDir = join(__dirname, '..', '..', 'storage', 'hls');
   mkdirSync(hlsDir, { recursive: true });
   app.useStaticAssets(hlsDir, { prefix: '/media/' });
