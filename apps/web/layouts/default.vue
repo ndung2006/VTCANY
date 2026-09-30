@@ -31,6 +31,7 @@
         <p class="font-semibold text-neutral-300">CÔNG TY VTC DỊCH VỤ TRUYỀN HÌNH SỐ</p>
         <p>65 Lạc Trung, phường Vĩnh Tuy, Hà Nội</p>
         <p>Email: vtc.digital@vtc.vn</p>
+        <p class="mt-1 text-neutral-500">GCN ĐKKD: 0100110006-026 do Sở KH&ĐT TP Hà Nội cấp</p>
       </div>
     </aside>
 

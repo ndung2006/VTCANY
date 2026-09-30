@@ -28,3 +28,9 @@ export function parseSlugId(param: string): { slug: string; publicId: string } {
   if (!m) throw new Error('invalid slug-id format, expected {slug}-{24hex}');
   return { slug: m[1], publicId: m[2] };
 }
+
+// URL chi tiết nội dung theo loại (giống quy ước vtcplay.vn: /phim|video|short/{slug}-{24hex}).
+export function contentUrl(item: { type?: string; slug: string; public_id: string }): string {
+  const kind = item.type === 'short' ? 'short' : item.type === 'video' ? 'video' : 'phim';
+  return `/${kind}/${item.slug}-${item.public_id}`;
+}

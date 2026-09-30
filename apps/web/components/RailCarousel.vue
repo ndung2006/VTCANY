@@ -51,6 +51,8 @@ export interface RailBlock {
   items: RailItem[];
 }
 
+import { contentUrl } from '@/utils/url';
+
 const props = defineProps<{ block: RailBlock }>();
 
 const responsive = [
@@ -60,7 +62,6 @@ const responsive = [
 ];
 
 function cardUrl(item: RailItem): string {
-  const kind = item.type === 'short' ? 'short' : item.type === 'video' ? 'video' : 'phim';
-  return `/${kind}/${item.slug}-${item.public_id}`;
+  return contentUrl(item);
 }
 </script>

@@ -23,6 +23,10 @@ export default defineNuxtConfig({
       apiBase: process.env.NUXT_PUBLIC_API_BASE || 'http://localhost:3001/api/v1',
       // false = xem Truyền hình không cần login (đặt NUXT_PUBLIC_REQUIRE_LOGIN_TV=true để chặn như VTC Play).
       requireLoginTv: process.env.NUXT_PUBLIC_REQUIRE_LOGIN_TV === 'true',
+      // OAuth web (dialog đăng nhập kiểu VTC Play: Google + Facebook).
+      // Chưa set = nút bấm sẽ báo chưa cấu hình, vẫn dùng được đăng nhập token dev.
+      googleClientId: process.env.NUXT_PUBLIC_GOOGLE_CLIENT_ID || '',
+      facebookAppId: process.env.NUXT_PUBLIC_FACEBOOK_APP_ID || '',
     },
   },
   app: {
