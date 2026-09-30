@@ -114,7 +114,8 @@ const showLogin = ref(false);
 const openGroup = ref<string | undefined>(undefined);
 
 async function pick(c: Channel) {
-  if (!loggedIn.value) {
+  const needLogin = config.public.requireLoginTv as boolean;
+  if (needLogin && !loggedIn.value) {
     showLogin.value = true;
     return;
   }
@@ -123,7 +124,7 @@ async function pick(c: Channel) {
   epg.value = await $fetch(`/channels/${c.public_id}/epg`, {
     baseURL: config.public.apiBase as string,
     query: { date: activeDate.value },
-    headers: { Authorization: `Bearer ${token.value}` },
+    ...(token.value ? { headers: { Authorization: `Bearer ${token.value}` } } : {}),
   });
 }
 
