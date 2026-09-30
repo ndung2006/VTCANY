@@ -110,9 +110,10 @@ interface Channel {
 const { data: groupsData, pending } = await useFetch('/channels', {
   baseURL: config.public.apiBase as string,
 });
-const groups = computed(
-  () =>
-    ((groupsData.value as unknown as { groups: Array<{ name: string; channels: Channel[] }> } | null)?.groups ?? []),
+const groups = computed(() =>
+  (
+    (groupsData.value as unknown as { groups: Array<{ name: string; channels: Channel[] }> } | null)?.groups ?? []
+  ).filter((g) => g.channels.length > 0),
 );
 
 const activeGroup = ref<string | undefined>(undefined);
