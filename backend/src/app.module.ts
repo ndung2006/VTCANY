@@ -8,6 +8,8 @@ import { AuditModule } from './modules/audit/audit.module';
 import { UploadsModule } from './modules/uploads/uploads.module';
 import { LayoutModule } from './modules/layout/layout.module';
 import { MoviesModule } from './modules/movies/movies.module';
+import { TvModule } from './modules/tv/tv.module';
+import { SearchModule } from './modules/search/search.module';
 import { HealthController } from './health.controller';
 
 @Module({
@@ -21,6 +23,8 @@ import { HealthController } from './health.controller';
     UploadsModule,
     LayoutModule,
     MoviesModule,
+    TvModule,
+    SearchModule,
   ],
   controllers: [HealthController],
 })

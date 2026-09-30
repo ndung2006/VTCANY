@@ -121,24 +121,8 @@ export class ContentController {
     return v;
   }
 
-  @RequirePerms('epg:read')
-  @Get('channels/:slug/epg')
-  async getEpg(@Param('slug') slug: string, @Query('date') date?: string) {
-    // epgNow tu AIO de app hien now/next; timeline local van la nguon CMS nhap tay.
-    // AIO loi -> van tra timeline local (khong vo trang EPG).
-    let epgNow: unknown = null;
-    try {
-      epgNow = await this.playback.channelNow(slug);
-    } catch {
-      epgNow = null;
-    }
-    return {
-      channel: { name: slug.toUpperCase(), slug },
-      date: date || 'default',
-      epgNow,
-      timeline: this.epgService.get(slug, date),
-    };
-  }
+  // GET channels/:slug/epg đã chuyển sang TvController (public cho 24hex,
+  // CMS slug vẫn yêu cầu quyền) để tránh xung đột route.
 
   // Lich full tu AIO theo ngay (VD ?date=2026-09-29). Kenh chua cap EPG
   // hoac AIO loi -> fallback timeline local.

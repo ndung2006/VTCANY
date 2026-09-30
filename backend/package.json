@@ -7,7 +7,7 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/main.js",
     "seed": "ts-node src/seed/seed.ts",
-    "test": "npm run build && node --test aio-client.test.mjs telemetry.test.mjs hardening.test.mjs uploads.test.mjs standardize.test.mjs layout.test.mjs movies.test.mjs"
+    "test": "npm run build && node --test aio-client.test.mjs telemetry.test.mjs hardening.test.mjs uploads.test.mjs standardize.test.mjs layout.test.mjs movies.test.mjs tv-search.test.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1141.0",

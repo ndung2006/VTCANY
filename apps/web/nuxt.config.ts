@@ -5,7 +5,7 @@ export default defineNuxtConfig({
   primevue: {
     options: { ripple: true },
     components: {
-      include: ['Carousel', 'Button', 'InputText', 'Skeleton', 'Accordion', 'AccordionTab'],
+      include: ['Carousel', 'Button', 'InputText', 'Skeleton', 'Accordion', 'AccordionPanel', 'AccordionHeader', 'AccordionContent', 'Dialog'],
     },
   },
   css: ['primeicons/primeicons.css', '@/assets/css/main.css'],
