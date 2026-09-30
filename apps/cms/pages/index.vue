@@ -10,6 +10,17 @@
       </div>
     </div>
 
+    <div class="surface-card p-5">
+      <h2 class="mb-3 font-semibold">Quản lý nhanh</h2>
+      <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
+        <NuxtLink v-for="q in quickLinks" :key="q.to" :to="q.to"
+          class="flex items-center gap-3 rounded-lg border border-neutral-800 p-3 hover:bg-white/5">
+          <i :class="['pi', q.icon, 'text-lg text-sky-400']" />
+          <span class="text-sm">{{ q.label }}</span>
+        </NuxtLink>
+      </div>
+    </div>
+
     <div class="grid gap-6 xl:grid-cols-2">
       <div class="surface-card p-5">
         <div class="mb-3 flex items-center justify-between">
@@ -56,6 +67,22 @@ const stats = ref([
 ]);
 const videos = ref<any[]>([]);
 const audits = ref<any[]>([]);
+const quickLinks = [
+  { to: '/phim', label: 'Phim', icon: 'pi-video' },
+  { to: '/short', label: 'Short', icon: 'pi-bolt' },
+  { to: '/tap-tin', label: 'Tập tin', icon: 'pi-folder-open' },
+  { to: '/the-loai', label: 'Thể loại', icon: 'pi-tags' },
+  { to: '/dien-vien', label: 'Diễn viên', icon: 'pi-user' },
+  { to: '/danh-sach-phat', label: 'Danh sách phát', icon: 'pi-list' },
+  { to: '/bai-viet', label: 'Bài viết', icon: 'pi-file-edit' },
+  { to: '/su-kien', label: 'Sự kiện', icon: 'pi-calendar' },
+  { to: '/livestream', label: 'Livestream', icon: 'pi-broadcast-tower' },
+  { to: '/thong-bao', label: 'Thông báo', icon: 'pi-bell' },
+  { to: '/tu-khoa', label: 'Từ khoá', icon: 'pi-search' },
+  { to: '/goi-cuoc', label: 'Gói cước', icon: 'pi-credit-card' },
+  { to: '/thong-ke', label: 'Thống kê', icon: 'pi-chart-bar' },
+  { to: '/cai-dat', label: 'Cài đặt', icon: 'pi-cog' },
+];
 
 function statusSev(s: string) {
   return { draft: 'secondary', pending: 'warn', published: 'success', rejected: 'danger' }[s] || 'info';

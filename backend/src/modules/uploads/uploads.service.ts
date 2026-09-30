@@ -92,6 +92,17 @@ export class UploadsService {
     return rec;
   }
 
+  // Danh sach upload cho thu vien "Tap tin" cua CMS (kem trang thai transcode).
+  listUploads(): (UploadRecord & { transcode: string })[] {
+    return [...this.records.values()].map((rec) => {
+      const done = !!rec.videoId && this.videoHls.has(rec.videoId);
+      return {
+        ...rec,
+        transcode: done ? 'done' : rec.status === 'error' ? 'error' : rec.status === 'uploaded' || rec.status === 'processing' ? 'processing' : 'pending',
+      };
+    });
+  }
+
   // Browser bao upload xong (hoac storage webhook) -> chuyen Uploaded, san sang worker.
   // Local: gop chunk truoc. S3: file da nam tren bucket.
   // Day job vao BullMQ (neu co REDIS_URL); luon giu ban ghi processing de

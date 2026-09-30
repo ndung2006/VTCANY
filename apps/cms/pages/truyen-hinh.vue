@@ -21,6 +21,8 @@
           <Calendar v-model="date" date-format="yy-mm-dd" show-icon @date-select="loadEpg" class="w-40" />
           <span class="text-xs text-neutral-500">Nguồn: {{ source }}</span>
           <div class="flex-1" />
+          <Button label="Tải file mẫu" icon="pi pi-download" size="small" outlined @click="downloadTemplate" />
+          <Button v-if="can('catalog:write')" label="Nhập Excel" icon="pi pi-upload" size="small" severity="info" @click="impDlg = true" />
           <Button label="Lưu lịch" icon="pi pi-save" :loading="saving" @click="save" />
         </div>
 
@@ -50,6 +52,20 @@
       </div>
     </div>
     <Toast />
+
+    <!-- Dialog nhập Excel EPG -->
+    <Dialog v-model:visible="impDlg" modal header="Nhập lịch từ file Excel (CSV)" class="w-full max-w-md">
+      <div class="flex flex-col gap-3">
+        <p class="text-sm text-neutral-400">Kênh: <b class="text-neutral-200">{{ selected?.name }}</b> — Ngày: <b class="text-neutral-200">{{ dateStr() }}</b></p>
+        <div><label class="field-label">File CSV (theo mẫu)</label>
+          <input type="file" accept=".csv" class="w-full text-sm" @change="(e: any) => impFile = e.target.files?.[0] || null" />
+        </div>
+      </div>
+      <template #footer>
+        <Button label="Hủy" text @click="impDlg = false" />
+        <Button label="Nhập" icon="pi pi-upload" :loading="importing" @click="doImport" :disabled="!impFile" />
+      </template>
+    </Dialog>
   </div>
 </template>
 
@@ -59,6 +75,7 @@ useHead({ title: 'Truyền hình & EPG - VTC ANY CMS' });
 
 const api = useApi();
 const toast = useToast();
+const { can } = useCmsAuth();
 const groups = ref<any[]>([]);
 const selected = ref<any>(null);
 const date = ref(new Date());
@@ -68,6 +85,14 @@ const loading = ref(false);
 const saving = ref(false);
 const row = ref({ time: '', title: '', status: 'UPCOMING' });
 const rowIdx = ref(-1);
+const impDlg = ref(false);
+const impFile = ref<File | null>(null);
+const importing = ref(false);
+
+function authHeaders(): Record<string, string> {
+  const token = localStorage.getItem('cms_token') || sessionStorage.getItem('cms_token');
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
 
 function slugOf(ch: any) {
   return ch.slug || String(ch.id || '').toLowerCase().replace(/[^a-z0-9]+/g, '-');
@@ -114,4 +139,44 @@ onMounted(async () => {
     groups.value = (r.groups || []).filter((g: any) => (g.channels || []).length);
   } catch { toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Không tải được danh sách kênh', life: 3000 }); }
 });
+
+// ---- Nhập Excel EPG: tải file mẫu CSV + import multipart ----
+async function downloadTemplate() {
+  try {
+    const base = (useRuntimeConfig().public.apiBase as string).replace(/\/$/, '');
+    const blob = await $fetch<Blob>(`${base}/admin/catalog/epg/template`, {
+      headers: authHeaders(),
+      responseType: 'blob',
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'epg-template.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch {
+    toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Không tải được file mẫu', life: 3000 });
+  }
+}
+async function doImport() {
+  if (!selected.value || !impFile.value) return;
+  importing.value = true;
+  try {
+    const base = (useRuntimeConfig().public.apiBase as string).replace(/\/$/, '');
+    const fd = new FormData();
+    fd.append('file', impFile.value);
+    const r = await $fetch<any>(`${base}/admin/catalog/channels/${slugOf(selected.value)}/epg/import`, {
+      method: 'POST',
+      query: { date: dateStr() },
+      body: fd,
+      headers: authHeaders(),
+    });
+    toast.add({ severity: 'success', summary: 'Xong', detail: `Đã nhập ${r.imported ?? 0} dòng lịch ngày ${dateStr()}`, life: 4000 });
+    impDlg.value = false;
+    impFile.value = null;
+    loadEpg();
+  } catch (e: any) {
+    toast.add({ severity: 'error', summary: 'Lỗi', detail: e?.response?.data?.error?.message || 'Nhập thất bại', life: 3000 });
+  } finally { importing.value = false; }
+}
 </script>

@@ -67,6 +67,7 @@ const ROLE_PERMS: Record<Role, string[]> = {
     'epg:read', 'epg:write',
     'category:read', 'category:create', 'category:update',
     'layout:read',
+    'catalog:read', 'catalog:write',
   ],
 };
 
