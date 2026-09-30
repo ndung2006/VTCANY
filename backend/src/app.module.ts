@@ -7,6 +7,7 @@ import { TelemetryModule } from './modules/telemetry/telemetry.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { UploadsModule } from './modules/uploads/uploads.module';
 import { LayoutModule } from './modules/layout/layout.module';
+import { MoviesModule } from './modules/movies/movies.module';
 import { HealthController } from './health.controller';
 
 @Module({
@@ -19,6 +20,7 @@ import { HealthController } from './health.controller';
     TelemetryModule,
     UploadsModule,
     LayoutModule,
+    MoviesModule,
   ],
   controllers: [HealthController],
 })
