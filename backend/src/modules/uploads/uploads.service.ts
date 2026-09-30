@@ -152,9 +152,12 @@ export class UploadsService {
     const m = this.videoHls.get(videoId);
     if (!m) throw new Error('vod not ready');
     // URL ky HMAC han 15 phut - player khong can Bearer token.
+    // VOD_PUBLIC_BASE_URL: domain rieng cho VOD (vd https://vod.vtcrd.top).
     const exp = Math.floor(Date.now() / 1000) + PLAYLIST_TTL_SEC;
     const sig = signMedia(m.uploadId, exp);
-    return { hls_path: `/api/v1/media/${m.uploadId}/playlist.m3u8?exp=${exp}&sig=${sig}` };
+    const base = (this.config.get<string>('VOD_PUBLIC_BASE_URL', '') || '').replace(/\/$/, '');
+    const path = `/api/v1/media/${m.uploadId}/playlist.m3u8?exp=${exp}&sig=${sig}`;
+    return { hls_path: base ? base + path : path };
   }
 
   /** Doc master.m3u8 va viet lai segment URL thanh URL ky rieng (han 8h). */

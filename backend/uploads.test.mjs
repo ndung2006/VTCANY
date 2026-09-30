@@ -110,3 +110,18 @@ test('signedPlaylist viet lai segment thanh URL ky tuyet doi', async () => {
   assert.throws(() => svc.signedPlaylist('../x', 'https://api.example.com'), /invalid upload id/);
   assert.throws(() => svc.signedPlaylist('upl-missing', 'https://api.example.com'), /playlist not found/);
 });
+
+test('videoPlay dung VOD_PUBLIC_BASE_URL khi co dat', async () => {
+  const { mkdtempSync } = await import('fs');
+  const { tmpdir } = await import('os');
+  const { join } = await import('path');
+  const dir = mkdtempSync(join(tmpdir(), 'vtc-upl-'));
+  const cfg = { get: (k, d) => (k === 'STORAGE_DIR' ? dir : k === 'VOD_PUBLIC_BASE_URL' ? 'https://vod.vtcrd.top' : d) };
+  const svc = new UploadsService(cfg);
+  const r = await svc.init('v.mp4', 3, 'video/mp4', 'vid-vod');
+  await svc.putChunk(r.id, 0, Readable.from([Buffer.from('V')]));
+  svc.complete(r.id);
+  svc.setVideoReady(r.id);
+  const play = svc.videoPlay('vid-vod');
+  assert.match(play.hls_path, /^https:\/\/vod\.vtcrd\.top\/api\/v1\/media\/.+\/playlist\.m3u8\?exp=\d+&sig=[0-9a-f]{64}$/);
+});
