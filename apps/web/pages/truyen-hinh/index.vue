@@ -1,70 +1,88 @@
 <template>
-  <div class="p-5">
-    <h1 class="text-xl font-bold">Truyền hình</h1>
+  <div class="flex flex-col gap-5 p-5 lg:flex-row">
+    <!-- Cột chính: player + tab nhóm kênh + lưới kênh -->
+    <div class="min-w-0 flex-1">
+      <div class="overflow-hidden rounded-xl bg-black">
+        <div v-if="current && epg?.channel.hls_url" class="aspect-video">
+          <VideoPlayer :key="current.public_id" :src="epg.channel.hls_url" />
+        </div>
+        <div v-else class="flex aspect-video flex-col items-center justify-center gap-3 bg-black">
+          <span class="flex h-16 w-16 items-center justify-center rounded-full bg-neutral-800">
+            <i class="pi pi-play text-2xl text-neutral-500" />
+          </span>
+          <p v-if="current" class="text-sm text-neutral-400">Kênh chưa có luồng phát.</p>
+          <p v-else class="text-sm text-neutral-500">Chọn một kênh bên dưới để xem</p>
+        </div>
+      </div>
+      <h2 v-if="current" class="mt-3 text-lg font-bold">{{ current.name }}</h2>
 
-    <Carousel :value="dates" :num-visible="5" :num-scroll="5" class="mt-4">
-      <template #item="{ data }">
+      <!-- Tab nhóm kênh -->
+      <div class="mt-4 flex gap-1 overflow-x-auto">
         <button
-          class="mx-1 w-full rounded-lg px-2 py-2 text-sm"
-          :class="data.iso === activeDate ? 'bg-sky-500 font-semibold text-white' : 'bg-neutral-800 hover:bg-neutral-700'"
-          @click="activeDate = data.iso"
+          v-for="g in groups"
+          :key="g.name"
+          class="whitespace-nowrap px-3 py-2 text-sm font-bold uppercase"
+          :class="g.name === activeGroup ? 'text-white' : 'text-neutral-500 hover:text-neutral-300'"
+          @click="activeGroup = g.name"
         >
-          {{ data.label }}
+          {{ g.name }}
         </button>
-      </template>
-    </Carousel>
+      </div>
 
-    <div v-if="pending" class="mt-4 flex flex-col gap-2">
-      <Skeleton width="100%" height="3rem" />
-      <Skeleton width="100%" height="3rem" />
+      <!-- Lưới card kênh nền trắng -->
+      <div v-if="pending" class="mt-2 grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-5">
+        <Skeleton v-for="i in 10" :key="i" height="5rem" class="!rounded-xl" />
+      </div>
+      <div v-else class="mt-2 grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-5">
+        <button
+          v-for="c in activeChannels"
+          :key="c.public_id"
+          class="flex h-20 items-center justify-center rounded-xl bg-white p-2 transition hover:ring-2 hover:ring-cyan-400"
+          :class="current?.public_id === c.public_id ? 'ring-2 ring-cyan-400' : ''"
+          @click="pick(c)"
+        >
+          <img v-if="c.logo" :src="c.logo" :alt="c.name" class="max-h-full max-w-full object-contain" />
+          <span v-else class="px-1 text-center text-sm font-bold text-neutral-800">{{ c.name }}</span>
+        </button>
+      </div>
+      <p v-if="!pending && !activeChannels.length" class="mt-2 text-sm text-neutral-400">Đang cập nhật kênh.</p>
     </div>
 
-    <Accordion v-else class="mt-4" :value="openGroup">
-      <AccordionPanel v-for="g in groups" :key="g.name" :value="g.name">
-        <AccordionHeader>{{ g.name }} ({{ g.channels.length }})</AccordionHeader>
-        <AccordionContent>
-          <p v-if="!g.channels.length" class="text-sm text-neutral-400">Đang cập nhật kênh.</p>
-          <div class="flex flex-col gap-1">
-            <button
-              v-for="c in g.channels"
-              :key="c.public_id"
-              class="flex items-center gap-3 rounded-lg p-2 text-left hover:bg-neutral-800"
-              @click="pick(c)"
-            >
-              <span class="flex h-10 w-10 items-center justify-center rounded bg-neutral-700 text-sm font-bold">
-                {{ c.name.slice(0, 1) }}
-              </span>
-              <span class="text-sm font-semibold">{{ c.name }}</span>
-              <span v-if="c.audio_only" class="rounded bg-neutral-700 px-2 py-0.5 text-xs">Radio</span>
-              <span v-if="current?.public_id === c.public_id" class="ml-auto flex items-center gap-1 text-xs text-red-400">
-                <span class="h-2 w-2 rounded-full bg-red-500" /> Đang xem
-              </span>
-            </button>
-          </div>
-        </AccordionContent>
-      </AccordionPanel>
-    </Accordion>
+    <!-- Cột phải: date picker + lịch phát sóng -->
+    <aside class="w-full shrink-0 rounded-xl bg-neutral-900 p-4 lg:w-[30%]">
+      <Carousel :value="dates" :num-visible="3" :num-scroll="3" :show-indicators="false">
+        <template #item="{ data }">
+          <button
+            class="mx-1 w-full rounded-lg bg-neutral-800 px-2 py-2 text-sm text-white hover:bg-neutral-700"
+            :class="data.iso === activeDate ? '!bg-neutral-700 font-semibold text-cyan-300 ring-1 ring-cyan-400' : ''"
+            @click="activeDate = data.iso"
+          >
+            {{ data.label }}
+          </button>
+        </template>
+      </Carousel>
 
-    <div v-if="current" class="mt-6">
-      <h2 class="mb-2 text-lg font-bold">{{ current.name }}</h2>
-      <VideoPlayer v-if="epg?.channel.hls_url" :key="current.public_id" :src="epg.channel.hls_url" />
-      <p v-else class="text-sm text-neutral-400">Kênh chưa có luồng phát.</p>
-      <h3 class="mb-2 mt-4 font-semibold">Lịch phát sóng</h3>
-      <ul class="flex flex-col gap-1">
-        <li v-for="it in epg?.timeline ?? []" :key="it.time + it.title" class="flex items-center gap-3 text-sm">
+      <h3 class="mb-2 mt-4 text-sm font-bold uppercase text-neutral-300">Lịch phát sóng</h3>
+      <ul v-if="(epg?.timeline ?? []).length" class="flex max-h-[60vh] flex-col gap-1 overflow-y-auto">
+        <li
+          v-for="it in epg?.timeline ?? []"
+          :key="it.time + it.title"
+          class="flex items-center gap-3 rounded-lg px-2 py-1.5 text-sm hover:bg-neutral-800"
+        >
           <span class="w-12 shrink-0 text-neutral-400">{{ it.time }}</span>
           <span class="min-w-0 flex-1 truncate">{{ it.title }}</span>
           <span
             v-if="it.status === 'LIVE'"
-            class="flex items-center gap-1 rounded bg-red-600 px-2 py-0.5 text-xs font-semibold"
+            class="flex shrink-0 items-center gap-1 rounded bg-red-600 px-2 py-0.5 text-xs font-semibold"
           >
             <span class="h-1.5 w-1.5 rounded-full bg-white" /> LIVE
           </span>
-          <span v-else class="text-xs text-neutral-400">{{ it.status }}</span>
         </li>
       </ul>
-      <p v-if="!(epg?.timeline ?? []).length" class="text-sm text-neutral-400">Chưa có lịch ngày này.</p>
-    </div>
+      <p v-else class="py-8 text-center text-sm text-neutral-500">
+        {{ current ? 'Chưa có lịch ngày này.' : 'Chọn một kênh để xem lịch phát sóng.' }}
+      </p>
+    </aside>
 
     <Dialog v-model:visible="showLogin" modal header="Thông báo" :style="{ width: '22rem' }">
       <p class="text-sm">Vui lòng đăng nhập để xem nội dung!</p>
@@ -77,6 +95,8 @@
 </template>
 
 <script setup lang="ts">
+useHead({ title: 'Truyền hình - VTC ANY' });
+
 const config = useRuntimeConfig();
 const { loggedIn, token } = useAuth();
 
@@ -90,7 +110,20 @@ interface Channel {
 const { data: groupsData, pending } = await useFetch('/channels', {
   baseURL: config.public.apiBase as string,
 });
-const groups = computed(() => ((groupsData.value as unknown as { groups: Array<{ name: string; channels: Channel[] }> } | null)?.groups ?? []));
+const groups = computed(
+  () =>
+    ((groupsData.value as unknown as { groups: Array<{ name: string; channels: Channel[] }> } | null)?.groups ?? []),
+);
+
+const activeGroup = ref<string | undefined>(undefined);
+watch(
+  groups,
+  (g) => {
+    if (!activeGroup.value && g.length) activeGroup.value = g[0].name;
+  },
+  { immediate: true },
+);
+const activeChannels = computed(() => groups.value.find((g) => g.name === activeGroup.value)?.channels ?? []);
 
 function isoOf(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -98,20 +131,25 @@ function isoOf(d: Date): string {
 const todayIso = isoOf(new Date());
 const dates = computed(() => {
   const out: Array<{ iso: string; label: string }> = [];
-  for (let delta = -3; delta <= 1; delta++) {
+  for (let delta = -3; delta <= 3; delta++) {
     const d = new Date();
     d.setDate(d.getDate() + delta);
     const iso = isoOf(d);
-    out.push({ iso, label: iso === todayIso ? 'Hôm nay' : `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}` });
+    out.push({
+      iso,
+      label: iso === todayIso ? 'Hôm nay' : `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`,
+    });
   }
   return out;
 });
 const activeDate = ref(todayIso);
 
 const current = ref<Channel | null>(null);
-const epg = ref<{ channel: { hls_url: string | null }; timeline: Array<{ time: string; title: string; status: string }> } | null>(null);
+const epg = ref<{
+  channel: { hls_url: string | null };
+  timeline: Array<{ time: string; title: string; status: string }>;
+} | null>(null);
 const showLogin = ref(false);
-const openGroup = ref<string | undefined>(undefined);
 
 async function pick(c: Channel) {
   const needLogin = config.public.requireLoginTv as boolean;
