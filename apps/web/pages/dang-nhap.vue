@@ -1,7 +1,7 @@
 <template>
   <div class="flex min-h-[70vh] items-center justify-center p-5">
     <div class="w-full max-w-sm rounded-2xl border border-neutral-800 bg-neutral-900 p-6 text-center">
-      <p class="text-2xl font-extrabold"><span class="text-white">VTC</span><span class="text-sky-400">ANY</span></p>
+      <img src="/icons/vtc-any/logo-vtc-any-transparent.svg" alt="VTC ANY" width="156" height="66" class="mx-auto" />
       <h1 class="mt-2 text-lg font-bold">Đăng nhập</h1>
       <p class="mt-1 text-sm text-neutral-400">Đăng nhập để xem Truyền hình và dùng Yêu thích</p>
 

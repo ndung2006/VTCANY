@@ -1,8 +1,8 @@
 <template>
   <div class="min-h-screen bg-neutral-950 text-neutral-100">
     <aside class="fixed left-0 top-0 flex h-screen w-60 flex-col border-r border-neutral-800 bg-neutral-900">
-      <NuxtLink to="/" class="flex items-center gap-2 px-5 py-4 text-xl font-extrabold">
-        <span class="text-white">VTC</span><span class="text-sky-400">ANY</span>
+      <NuxtLink to="/" class="flex items-center px-5 py-4">
+        <img src="/icons/vtc-any/logo-vtc-any-transparent.svg" alt="VTC ANY" width="156" height="66" />
       </NuxtLink>
 
       <nav class="flex flex-col gap-1 px-3 text-sm">

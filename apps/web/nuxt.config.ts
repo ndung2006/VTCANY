@@ -32,7 +32,16 @@ export default defineNuxtConfig({
   app: {
     head: {
       title: 'VTC ANY',
-      meta: [{ name: 'robots', content: 'noindex, nofollow' }],
+      meta: [
+        { name: 'robots', content: 'noindex, nofollow' },
+        { name: 'theme-color', content: '#091728' },
+      ],
+      link: [
+        { rel: 'icon', href: '/icons/vtc-any/favicon.ico', sizes: 'any' },
+        { rel: 'icon', href: '/icons/vtc-any/favicon.svg', type: 'image/svg+xml' },
+        { rel: 'apple-touch-icon', href: '/icons/vtc-any/apple-touch-icon.png' },
+        { rel: 'manifest', href: '/icons/vtc-any/site.webmanifest' },
+      ],
     },
   },
   compatibilityDate: '2024-11-01',
