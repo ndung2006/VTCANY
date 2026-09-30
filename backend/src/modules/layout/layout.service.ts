@@ -1,69 +1,37 @@
 import { Injectable } from '@nestjs/common';
+import { HOME_SEED, HomeBlockSeed } from './seed-data';
 
-export interface HomeBlock {
-  order: number;
-  type: 'BANNER_SLIDER' | 'HORIZONTAL_LIST';
-  title?: string;
-  items: Array<{
-    id: string;
-    title: string;
-    subtitle?: string;
-    thumbnail?: string | null;
-    action: 'OPEN_CHANNEL' | 'OPEN_VIDEO';
-    target_id: string;
-  }>;
-}
+// Server-Driven UI: GET /api/v1/layout/home?platform=WEB (Mục 3A).
+// Nguồn đọc: bảng layout_blocks (migration 0001) — Phase hiện tại dùng seed
+// in-memory nạp lúc boot; Redis cache 60s — Phase hiện tại dùng cache
+// in-memory TTL, thay bằng Redis mà không đổi shape API.
 
-// Server-Driven UI: CMS/AIO doi danh muc, Web/App tu doi theo ma khong sua code.
+const CACHE_TTL_MS = 60_000;
+
 @Injectable()
 export class LayoutService {
-  buildHome(
-    channels: Array<{ name: string; epgNow?: { title: string } | null }>,
-    videos: Array<{ id: string; title: string }>,
-    platform = 'WEB',
-  ): { platform: string; layout_blocks: HomeBlock[] } {
-    const live = channels.slice(0, 8);
-    const blocks: HomeBlock[] = [
-      {
-        order: 1,
-        type: 'BANNER_SLIDER',
-        items: live.slice(0, 5).map((c) => ({
-          id: `banner-${c.name}`,
-          title: c.name,
-          subtitle: c.epgNow?.title || 'Live',
-          thumbnail: null,
-          action: 'OPEN_CHANNEL' as const,
-          target_id: c.name,
-        })),
-      },
-      {
-        order: 2,
-        type: 'HORIZONTAL_LIST',
-        title: 'Dang phat truc tiep',
-        items: live.map((c) => ({
-          id: c.name,
-          title: c.name,
-          subtitle: c.epgNow?.title || 'Live',
-          thumbnail: null,
-          action: 'OPEN_CHANNEL' as const,
-          target_id: c.name,
-        })),
-      },
-    ];
-    if (videos.length > 0) {
-      blocks.push({
-        order: 3,
-        type: 'HORIZONTAL_LIST',
-        title: 'Moi xuat ban',
-        items: videos.slice(0, 10).map((v) => ({
-          id: v.id,
-          title: v.title,
-          thumbnail: null,
-          action: 'OPEN_VIDEO' as const,
-          target_id: v.id,
-        })),
-      });
-    }
-    return { platform, layout_blocks: blocks };
+  private blocks: HomeBlockSeed[] = [...HOME_SEED];
+  private cache = new Map<string, { exp: number; data: { platform: string; layout_blocks: HomeBlockSeed[] } }>();
+
+  // HANG DOI DB (Postgres layout_blocks): thay thân hàm này bằng SELECT ...
+  // WHERE platform=$1 AND is_active ORDER BY "order", giữ nguyên return shape.
+  getHome(platform = 'WEB'): { platform: string; layout_blocks: HomeBlockSeed[] } {
+    const key = (platform || 'WEB').toUpperCase();
+    const now = Date.now();
+    const hit = this.cache.get(key);
+    if (hit && hit.exp > now) return hit.data;
+    const data = { platform: key, layout_blocks: this.blocks.filter((b) => b.items.length > 0) };
+    this.cache.set(key, { exp: now + CACHE_TTL_MS, data });
+    return data;
+  }
+
+  // Seed ghi đè (dùng cho script seed / test).
+  replaceAll(blocks: HomeBlockSeed[]): void {
+    this.blocks = blocks;
+    this.cache.clear();
+  }
+
+  count(): number {
+    return this.blocks.length;
   }
 }

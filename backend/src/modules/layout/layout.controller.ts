@@ -16,16 +16,8 @@ export class LayoutController {
 
   @Get('layout/home')
   async home(@Query('platform') platform?: string) {
-    // AIO loi -> van tra rail local (trang chu khong bao gio trang tay).
-    let channels: Array<{ name: string; epgNow?: { title: string } | null }> = [];
-    try {
-      const res = await this.playback.listChannels();
-      channels = res.channels.map((c) => ({ name: c.name, epgNow: c.epgNow as any }));
-    } catch {
-      channels = [];
-    }
-    const videos = this.content.list().filter((v) => v.status === 'published');
-    return this.layout.buildHome(channels, videos, (platform || 'WEB').toUpperCase());
+    // Server-Driven UI theo contract Mục 3A (seed 6 blocks giống trang chủ VTC Play).
+    return this.layout.getHome(platform);
   }
 
   @Get('channels/:slug/detail')
