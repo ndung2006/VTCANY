@@ -7,6 +7,7 @@ import { join } from 'path';
 import { Readable } from 'stream';
 import { UploadRecord, UploadStatus, planUpload } from './upload.plan';
 import { chunkExists, finalPath, rawDir, storageRootDefault, writeChunk } from './local-store';
+import { enqueueTranscode } from './transcode-queue';
 
 export function existsLocalUpload(root: string, uploadId: string): boolean {
   return existsSync(rawDir(root, uploadId));
@@ -92,12 +93,18 @@ export class UploadsService {
 
   // Browser bao upload xong (hoac storage webhook) -> chuyen Uploaded, san sang worker.
   // Local: gop chunk truoc. S3: file da nam tren bucket.
+  // Day job vao BullMQ (neu co REDIS_URL); luon giu ban ghi processing de
+  // worker poll fallback van thay job khi khong co Redis.
   complete(id: string): UploadRecord & { localPath?: string } {
     const rec = this.get(id);
     const root = this.storageRoot();
     if (existsLocalUpload(root, id)) {
       const fin = this.finalizeLocal(id);
       this.markProcessing(id);
+      const localPath = finalPath(root, id, rec.filename);
+      void enqueueTranscode({ uploadId: id, localPath, filename: rec.filename }).catch((e) =>
+        console.log('[uploads] bullmq enqueue failed, poll fallback:', e?.message),
+      );
       return { ...fin, status: 'processing' as const };
     }
     this.markUploaded(id);

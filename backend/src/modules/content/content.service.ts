@@ -40,6 +40,16 @@ export class ContentService {
     return v;
   }
 
+  update(id: string, patch: { title?: string; channel?: string }): Video {
+    const v = this.get(id);
+    if (patch.title !== undefined) {
+      if (!patch.title.trim()) throw new Error('title is required');
+      v.title = patch.title.trim();
+    }
+    if (patch.channel !== undefined) v.channel = patch.channel;
+    return v;
+  }
+
   list(): Video[] {
     return [...this.videos.values()];
   }

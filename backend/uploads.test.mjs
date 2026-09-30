@@ -57,3 +57,9 @@ test('transcode queue lists only processing jobs with localPath', async () => {
   assert.match(q[0].localPath, /a\.mp4$/);
   void b;
 });
+
+test('bullmq enqueue fallback: khong co REDIS_URL -> false, complete van ok', async () => {
+  const { enqueueTranscode } = await import('./dist/modules/uploads/transcode-queue.js');
+  delete process.env.REDIS_URL;
+  assert.equal(await enqueueTranscode({ uploadId: 'u1', localPath: '/tmp/a.mp4', filename: 'a.mp4' }), false);
+});

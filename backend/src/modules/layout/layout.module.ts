@@ -8,5 +8,6 @@ import { ContentModule } from '../content/content.module';
   imports: [PlaybackModule, ContentModule],
   controllers: [LayoutController],
   providers: [LayoutService],
+  exports: [LayoutService],
 })
 export class LayoutModule {}

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpException, HttpStatus, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, HttpException, HttpStatus, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { IsArray, IsIn, IsOptional, IsString, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 import { PermissionsGuard } from '../auth/permissions.guard';
@@ -13,6 +13,15 @@ import { UploadsService } from '../uploads/uploads.service';
 class CreateVideoDto {
   @IsString()
   title!: string;
+  @IsOptional()
+  @IsString()
+  channel?: string;
+}
+
+class UpdateVideoDto {
+  @IsOptional()
+  @IsString()
+  title?: string;
   @IsOptional()
   @IsString()
   channel?: string;
@@ -82,6 +91,21 @@ export class ContentController {
       return this.content.get(id);
     } catch {
       throw new HttpException({ error: { code: 'not_found', message: 'video not found' } }, HttpStatus.NOT_FOUND);
+    }
+  }
+
+  @RequirePerms('video:update')
+  @Patch('videos/:id')
+  update(@Param('id') id: string, @Body() dto: UpdateVideoDto, @Req() req: any) {
+    try {
+      const v = this.content.update(id, dto);
+      this.audit.record({ at: Date.now(), ...this.actor(req), action: 'video.update', resource: id });
+      return v;
+    } catch (e: any) {
+      const msg = e?.message || 'bad request';
+      if (msg === 'not found')
+        throw new HttpException({ error: { code: 'not_found', message: 'video not found' } }, HttpStatus.NOT_FOUND);
+      throw new HttpException({ error: { code: 'bad_request', message: msg } }, HttpStatus.BAD_REQUEST);
     }
   }
 

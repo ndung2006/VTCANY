@@ -1,5 +1,13 @@
-# apps/cms — CMS quản trị (Nuxt 3 ở Bước 7)
+# VTC ANY CMS (Bước 7/8)
 
-> Placeholder Bước 1/8. Bước 7 sẽ khởi tạo Nuxt 3 + PrimeVue tại đây:
-> `/login` (Email+password, Ghi nhớ, dark/light, đa ngôn ngữ) + CRUD
-> Danh mục/Phim/Video/Short/Banner/Rail theo Phụ lục 4.
+App quản trị: Nuxt 3 + PrimeVue + Tailwind CSS, SSR.
+
+## Chạy
+
+```bash
+npm install
+npm run dev   # http://localhost:3002
+```
+
+API base: env NUXT_PUBLIC_API_BASE (mặc định http://localhost:3001/api/v1).
+Tài khoản seed: admin@vtcany.vn / Admin@123.

@@ -10,6 +10,7 @@ import { LayoutModule } from './modules/layout/layout.module';
 import { MoviesModule } from './modules/movies/movies.module';
 import { TvModule } from './modules/tv/tv.module';
 import { SearchModule } from './modules/search/search.module';
+import { AdminModule } from './modules/admin/admin.module';
 import { HealthController } from './health.controller';
 
 @Module({
@@ -25,6 +26,7 @@ import { HealthController } from './health.controller';
     MoviesModule,
     TvModule,
     SearchModule,
+    AdminModule,
   ],
   controllers: [HealthController],
 })

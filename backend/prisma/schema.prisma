@@ -1,4 +1,9 @@
-// Phase 1 schema note: runtime dung in-memory, Prisma thay store o Phase 1.1 ma khong doi API.
+// VTC ANY — Full schema (Bước 1/8, theo Mục 2 tài liệu v2.0).
+// Quy ước:
+// - Mọi entity public có publicId: 24 ký tự hex (generatePublicId() trong packages/contracts).
+// - URL public: /{type}/{slug}-{publicId}.
+// - Runtime Phase 1 dùng in-memory store; Prisma thay store ở Phase 1.1 mà không đổi API.
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -8,17 +13,317 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model User {
-  id           String   @id @default(uuid())
-  username     String   @unique
-  passwordHash String
-  createdAt    DateTime @default(now())
+// ---------------------------------------------------------------------------
+// 2.1 Cụm Nội dung (Content)
+// ---------------------------------------------------------------------------
+
+model Category {
+  id          String     @id @default(uuid())
+  publicId    String     @unique @map("public_id") // 24hex
+  name        String
+  slug        String     @unique
+  parentId    String?    @map("parent_id")
+  parent      Category?  @relation("CategoryTree", fields: [parentId], references: [id])
+  children    Category[] @relation("CategoryTree")
+  icon        String?
+  thumbnail   String?
+  description String?
+  sortOrder   Int        @default(0) @map("sort_order")
+  isVisible   Boolean    @default(true) @map("is_visible")
+  platforms   String[]   // ["WEB","MOBILE","TV"]
+  appliesTo   String[]   @map("applies_to") // ["phim","video","short","tv"]
+  videos      Video[]    @relation("VideoCategories")
+  createdAt   DateTime   @default(now()) @map("created_at")
+  updatedAt   DateTime   @updatedAt @map("updated_at")
+
+  @@map("categories")
 }
 
 model Video {
+  id                 String           @id @default(uuid())
+  publicId           String           @unique @map("public_id") // 24hex
+  title              String
+  englishTitle       String?          @map("english_title")
+  slug               String
+  description        String?
+  posterVertical     String?          @map("poster_vertical") // 3:4
+  backdropHorizontal String?          @map("backdrop_horizontal") // 16:9
+  thumbnail          String? // 3:2
+  trailerUrl         String?          @map("trailer_url")
+  hlsUrl             String?          @map("hls_url")
+  dashUrl            String?          @map("dash_url")
+  durationSeconds    Int?             @map("duration_seconds")
+  releaseYear        Int?             @map("release_year")
+  ageRating          String           @default("P") @map("age_rating") // P/K/T13/T16/T18
+  directors          String[]
+  casts              String[]
+  country            String?
+  quality            String? // SD/HD/4K
+  introStartTime     Int?             @map("intro_start_time")
+  introEndTime       Int?             @map("intro_end_time")
+  isDownloadable     Boolean          @default(true) @map("is_downloadable")
+  viewCount          BigInt           @default(0) @map("view_count")
+  status             String           @default("draft") // draft|pending|published|rejected
+  publishAt          DateTime?        @map("publish_at")
+  seoMeta            Json?            @map("seo_meta")
+  categories         Category[]       @relation("VideoCategories")
+  episodes           Episode[]
+  subtitles          VideoSubtitle[]
+  createdAt          DateTime         @default(now()) @map("created_at")
+  updatedAt          DateTime         @updatedAt @map("updated_at")
+
+  @@map("videos")
+}
+
+model Episode {
+  id            String   @id @default(uuid())
+  movieId       String   @map("movie_id")
+  movie         Video    @relation(fields: [movieId], references: [id], onDelete: Cascade)
+  episodeNumber Int      @map("episode_number")
+  title         String?
+  thumbnail     String?
+  videoHlsUrl   String?  @map("video_hls_url")
+  durationText  String?  @map("duration_text") // "13 phút"
+  description   String?
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@unique([movieId, episodeNumber])
+  @@map("episodes")
+}
+
+model LiveChannel {
+  id         String         @id @default(uuid())
+  publicId   String         @unique @map("public_id") // 24hex
+  name       String
+  logo       String?
+  hlsUrl     String?        @map("hls_url")
+  groupName  String         @map("group_name") // Kênh VTV, KÊNH ĐỊA PHƯƠNG, RADIO...
+  sortOrder  Int            @default(0) @map("sort_order")
+  isVisible  Boolean        @default(true) @map("is_visible")
+  drmEnabled Boolean        @default(false) @map("drm_enabled")
+  schedules  EpgSchedule[]
+  createdAt  DateTime       @default(now()) @map("created_at")
+  updatedAt  DateTime       @updatedAt @map("updated_at")
+
+  @@map("live_channels")
+}
+
+model EpgSchedule {
+  id          String      @id @default(uuid())
+  channelId   String      @map("channel_id")
+  channel     LiveChannel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  programName String      @map("program_name")
+  startTime   DateTime    @map("start_time") @db.Timestamptz
+  endTime     DateTime    @map("end_time") @db.Timestamptz
+  thumbnail   String?
+
+  @@index([channelId, startTime])
+  @@map("epg_schedules")
+}
+
+model Short {
+  id              String   @id @default(uuid())
+  publicId        String   @unique @map("public_id") // 24hex
+  title           String
+  videoUrl        String   @map("video_url") // 9:16
+  thumbnail       String?
+  durationSeconds Int?     @map("duration_seconds")
+  hashtags        String[]
+  musicTitle      String?  @map("music_title")
+  status          String   @default("draft") // draft|pending|published|rejected
+  viewCount       BigInt   @default(0) @map("view_count")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@map("shorts")
+}
+
+// ---------------------------------------------------------------------------
+// 2.2 Cụm Tài nguyên (Media Library)
+// ---------------------------------------------------------------------------
+
+model MediaAsset {
   id        String   @id @default(uuid())
-  title     String
-  channel   String   @default("PHUTHO")
-  status    String   @default("draft") // draft|pending|published|rejected
-  createdAt DateTime @default(now())
+  fileUrl   String?  @map("file_url")
+  objectKey String?  @map("object_key")
+  fileType  String?  @map("file_type") // video|image|subtitle|audio
+  status    String   @default("pending") // pending|processing|done|error
+  error     String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("media_assets")
+}
+
+model VideoSubtitle {
+  id        String   @id @default(uuid())
+  videoId   String   @map("video_id")
+  video     Video    @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  fileUrl   String   @map("file_url")
+  language  String // vi|en
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("video_subtitles")
+}
+
+// ---------------------------------------------------------------------------
+// 2.3 Cụm Người dùng & Bảo mật (Auth & RBAC)
+// ---------------------------------------------------------------------------
+
+model User {
+  id           String         @id @default(uuid())
+  email        String?        @unique
+  phone        String?        @unique
+  avatar       String?
+  provider     String? // google|facebook
+  status       String         @default("active") // active|banned
+  createdAt    DateTime       @default(now()) @map("created_at")
+  profiles     UserProfile[]
+  sessions     UserSession[]
+  watchHistory WatchHistory[]
+  transactions Transaction[]
+
+  @@map("users")
+}
+
+model UserProfile {
+  id            String  @id @default(uuid())
+  userId        String  @map("user_id")
+  user          User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name          String
+  avatarUrl     String? @map("avatar_url")
+  isKidsProfile Boolean @default(false) @map("is_kids_profile")
+  pinCode       String? @map("pin_code")
+
+  @@map("user_profiles")
+}
+
+model UserSession {
+  id            String    @id @default(uuid())
+  userId        String    @map("user_id")
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sessionId     String    @unique @map("session_id")
+  deviceInfo    Json?     @map("device_info")
+  ip            String?
+  lastHeartbeat DateTime? @map("last_heartbeat") @db.Timestamptz
+  isActive      Boolean   @default(true) @map("is_active")
+
+  @@map("user_sessions")
+}
+
+model AdminUser {
+  id           String     @id @default(uuid())
+  email        String     @unique
+  passwordHash String     @map("password_hash")
+  fullName     String?    @map("full_name")
+  roleId       String?    @map("role_id")
+  role         Role?      @relation(fields: [roleId], references: [id])
+  status       String     @default("active") // active|disabled
+  lastLogin    DateTime?  @map("last_login")
+  createdAt    DateTime   @default(now()) @map("created_at")
+  auditLogs    AuditLog[]
+
+  @@map("admin_users")
+}
+
+model Role {
+  id          String      @id @default(uuid())
+  name        String      @unique
+  description String?
+  permissions Json // {"movies":["view","create","update","delete","approve"],...}
+  admins      AdminUser[]
+
+  @@map("roles")
+}
+
+model AuditLog {
+  id        String     @id @default(uuid())
+  adminId   String?    @map("admin_id")
+  admin     AdminUser? @relation(fields: [adminId], references: [id])
+  action    String // create|update|delete|approve|login...
+  module    String // movies|channels|users|...
+  targetId  String?    @map("target_id")
+  oldValue  Json?      @map("old_value")
+  newValue  Json?      @map("new_value")
+  createdAt DateTime   @default(now()) @map("created_at")
+
+  @@index([module, createdAt])
+  @@map("audit_logs")
+}
+
+// ---------------------------------------------------------------------------
+// 2.4 Cụm Thương mại hóa (Monetization)
+// ---------------------------------------------------------------------------
+
+model SubscriptionPackage {
+  id           String        @id @default(uuid())
+  name         String
+  description  String?
+  price        Int           @default(0) // VND
+  cycle        String        @default("month") // day|week|month|year
+  benefits     Json? // {max_quality, no_ads, max_devices}
+  sortOrder    Int           @default(0) @map("sort_order")
+  status       String        @default("active")
+  transactions Transaction[]
+
+  @@map("subscription_packages")
+}
+
+model Transaction {
+  id        String               @id @default(uuid())
+  orderCode String               @unique @map("order_code")
+  userId    String?              @map("user_id")
+  user      User?                @relation(fields: [userId], references: [id])
+  packageId String?              @map("package_id")
+  pkg       SubscriptionPackage? @relation(fields: [packageId], references: [id])
+  amount    Int
+  method    String? // vietqr|momo|...
+  status    String               @default("pending") // pending|paid|failed|cancelled
+  paidAt    DateTime?            @map("paid_at")
+  createdAt DateTime             @default(now()) @map("created_at")
+
+  @@map("transactions")
+}
+
+model PromoCode {
+  id              String    @id @default(uuid())
+  code            String    @unique
+  discountPercent Int?      @map("discount_percent")
+  discountAmount  Int?      @map("discount_amount")
+  usageLimit      Int?      @map("usage_limit")
+  usedCount       Int       @default(0) @map("used_count")
+  validFrom       DateTime? @map("valid_from")
+  validTo         DateTime? @map("valid_to")
+
+  @@map("promo_codes")
+}
+
+// ---------------------------------------------------------------------------
+// Server-Driven UI + Watch history (Bước 2, 8)
+// ---------------------------------------------------------------------------
+
+model LayoutBlock {
+  id        String   @id @default(uuid())
+  platform  String   @default("WEB") // WEB|MOBILE|TV
+  order     Int      @default(0)
+  type      String // HERO_CAROUSEL|HORIZONTAL_LIST
+  title     String?
+  config    Json // {items, target_url, card_aspect...}
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("layout_blocks")
+}
+
+model WatchHistory {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  contentId String   @map("content_id") // public_id của video
+  position  Int      @default(0) // giây
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([userId, contentId])
+  @@map("watch_history")
 }

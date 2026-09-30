@@ -28,11 +28,13 @@ export interface RailItem {
 }
 
 export interface HomeBlockSeed {
+  id?: string; // admin CRUD gán id; seed boot tự sinh
   order: number;
   type: 'HERO_CAROUSEL' | 'HORIZONTAL_LIST';
   title?: string;
   target_url?: string;
   card_aspect?: '3:2' | '3:4';
+  is_active?: boolean; // admin ẩn block; default true
   items: Array<HeroItem | RailItem>;
 }
 

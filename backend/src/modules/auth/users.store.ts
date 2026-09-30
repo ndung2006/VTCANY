@@ -62,7 +62,12 @@ export const SESSIONS = new Map<string, UserSession>(); // key: sessionId
 const ROLE_PERMS: Record<Role, string[]> = {
   superadmin: ['*'],
   admin: ['*'],
-  editor: ['video:read', 'video:create', 'video:submit', 'epg:read', 'epg:write'],
+  editor: [
+    'video:read', 'video:create', 'video:update', 'video:submit',
+    'epg:read', 'epg:write',
+    'category:read', 'category:create', 'category:update',
+    'layout:read',
+  ],
 };
 
 export function permissionsFor(role: Role): string[] {
