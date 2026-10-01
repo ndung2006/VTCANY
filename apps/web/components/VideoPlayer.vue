@@ -1,5 +1,8 @@
 <template>
-  <div class="relative aspect-video w-full overflow-hidden rounded-xl bg-black">
+  <div
+    class="relative w-full overflow-hidden rounded-xl bg-black"
+    :class="aspect === '9/16' ? 'aspect-[9/16]' : 'aspect-video'"
+  >
     <video
       ref="videoEl"
       class="h-full w-full"
@@ -19,7 +22,8 @@
 <script setup lang="ts">
 import Hls from 'hls.js';
 
-const props = defineProps<{ src: string; poster?: string }>();
+// aspect: '16/9' (mac dinh) hoac '9/16' cho short doc.
+const props = defineProps<{ src: string; poster?: string; aspect?: string }>();
 const emit = defineEmits<{ (e: 'ended'): void }>();
 
 const videoEl = ref<HTMLVideoElement | null>(null);

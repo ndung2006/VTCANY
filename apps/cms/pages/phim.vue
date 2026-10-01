@@ -110,6 +110,22 @@
               :loading="loadingFiles" placeholder="Chọn file đã transcode xong" class="w-full" />
             <InputText v-model="epForm.videoFileId" class="w-full mt-1" placeholder="...hoặc nhập ID file thủ công" />
           </div>
+          <div v-if="editingEp?.id" class="col-span-2">
+            <label class="field-label">Xem trước video</label>
+            <div v-if="epPreviewUrl" class="relative aspect-video overflow-hidden rounded-lg bg-black">
+              <HlsPreview :src="epPreviewUrl" class="absolute inset-0" />
+              <span class="absolute right-2 top-2 z-10 flex gap-1.5">
+                <button type="button" title="Bỏ video"
+                  class="flex h-9 w-9 items-center justify-center rounded-full border border-white/70 bg-black/30 text-red-400 backdrop-blur transition hover:bg-black/50"
+                  @click="epForm.videoFileId = ''; epPreviewUrl = ''">
+                  <i class="pi pi-trash text-sm"></i>
+                </button>
+              </span>
+            </div>
+            <Button v-else label="Xem trước video" icon="pi pi-play" outlined size="small"
+              :loading="epPreviewBusy" :disabled="!epForm.videoFileId" @click="loadEpPreview" />
+            <p v-if="epPreviewErr" class="mt-1 text-xs text-red-500">{{ epPreviewErr }}</p>
+          </div>
           <div><label class="field-label">Phụ đề EN (URL file)</label><InputText v-model="epForm.subtitleEn" class="w-full" /></div>
           <div><label class="field-label">Phụ đề VI (URL file)</label><InputText v-model="epForm.subtitleVi" class="w-full" /></div>
           <div class="col-span-2"><label class="field-label">Thumbnail</label><ImagePicker v-model="epForm.thumbnail" compact /></div>
@@ -249,6 +265,7 @@ function openEpAdd() {
 }
 function openEpEdit(e: any) {
   editingEp.value = e;
+  epPreviewUrl.value = ''; epPreviewErr.value = '';
   epForm.value = {
     name: e.name || '', description: e.description || '', order: e.order ?? null,
     publishedAt: toDate(e.publishedAt), duration: e.duration || '',
@@ -259,6 +276,25 @@ function openEpEdit(e: any) {
   epFormDlg.value = true;
   loadDoneFiles();
 }
+
+// Xem truoc video tap phim ngay trong form.
+const epPreviewUrl = ref('');
+const epPreviewBusy = ref(false);
+const epPreviewErr = ref('');
+async function loadEpPreview() {
+  if (!editingEp.value?.id) return;
+  epPreviewBusy.value = true; epPreviewErr.value = '';
+  try {
+    const r = await api.get<any>(`/admin/catalog/episodes/${editingEp.value.id}/play`);
+    epPreviewUrl.value = r.hls_path || '';
+    if (!epPreviewUrl.value) epPreviewErr.value = 'Chưa có URL phát cho tập này.';
+  } catch (e: any) {
+    epPreviewErr.value = e?.data?.error?.message || 'Video chưa sẵn sàng (chưa gắn file hoặc transcode chưa xong).';
+  } finally { epPreviewBusy.value = false; }
+}
+watch(() => epForm.value.videoFileId, () => { epPreviewUrl.value = ''; epPreviewErr.value = ''; });
+watch(epFormDlg, (open) => { if (!open) { epPreviewUrl.value = ''; epPreviewErr.value = ''; } });
+
 async function toggleEpPublish(ep: any) {
   const action = ep.isVisible ? 'unpublish' : 'publish';
   try {

@@ -4,7 +4,18 @@
     <div v-if="!compact" :class="['bg-neutral-100 dark:bg-neutral-800 rounded-lg overflow-hidden flex items-center justify-center relative', aspectClass]">
       <img v-if="url" :src="url" :class="['absolute inset-0 w-full h-full', fit === 'contain' ? 'object-contain bg-white' : 'object-cover']" alt="anh" />
       <span v-else class="text-xs text-neutral-400 px-2 text-center">Chưa có ảnh<br />({{ ratioLabel }})</span>
-      <Button v-if="url" icon="pi pi-trash" size="small" severity="danger" text class="absolute top-1 right-1" @click="url = ''" />
+      <span v-if="url" class="absolute right-1.5 top-1.5 flex gap-1.5">
+        <button type="button" title="Đổi ảnh"
+          class="flex h-8 w-8 items-center justify-center rounded-full border border-white/70 bg-black/30 text-green-400 backdrop-blur transition hover:bg-black/50"
+          @click.stop="fileEl?.click()">
+          <i class="pi pi-pencil text-xs"></i>
+        </button>
+        <button type="button" title="Xoá ảnh"
+          class="flex h-8 w-8 items-center justify-center rounded-full border border-white/70 bg-black/30 text-red-400 backdrop-blur transition hover:bg-black/50"
+          @click.stop="url = ''">
+          <i class="pi pi-trash text-xs"></i>
+        </button>
+      </span>
     </div>
 
     <div class="flex items-center gap-2" :class="{ 'mt-2': !compact }">

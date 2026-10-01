@@ -87,11 +87,32 @@
           </div>
           <div>
             <label class="field-label">Video</label>
-            <div class="aspect-video bg-neutral-100 dark:bg-neutral-800 rounded-lg flex flex-col items-center justify-center gap-2 p-3 text-center relative">
-              <i class="pi pi-play-circle text-4xl text-neutral-400"></i>
-              <span class="text-xs text-neutral-500 break-all">{{ selectedFileLabel || 'Chưa chọn video' }}</span>
-              <span v-if="form.videoFileId" class="text-[11px] text-neutral-400 break-all">{{ form.videoFileId }}</span>
+            <div class="relative aspect-video overflow-hidden rounded-lg bg-neutral-900">
+              <HlsPreview v-if="previewUrl" :src="previewUrl" :poster="form.thumbnail" class="absolute inset-0" />
+              <div v-else class="absolute inset-0 flex flex-col items-center justify-center gap-2 p-3 text-center">
+                <i class="pi pi-play-circle text-4xl text-neutral-400"></i>
+                <span class="text-xs text-neutral-400 break-all">{{ selectedFileLabel || 'Chưa chọn video' }}</span>
+                <span v-if="form.videoFileId" class="text-[11px] text-neutral-500 break-all">{{ form.videoFileId }}</span>
+              </div>
+              <span v-if="previewUrl" class="absolute right-2 top-2 z-10 flex gap-1.5">
+                <button type="button" title="Chọn video khác"
+                  class="flex h-9 w-9 items-center justify-center rounded-full border border-white/70 bg-black/30 text-green-400 backdrop-blur transition hover:bg-black/50"
+                  @click="previewUrl = ''">
+                  <i class="pi pi-pencil text-sm"></i>
+                </button>
+                <button type="button" title="Bỏ video"
+                  class="flex h-9 w-9 items-center justify-center rounded-full border border-white/70 bg-black/30 text-red-400 backdrop-blur transition hover:bg-black/50"
+                  @click="clearVideo">
+                  <i class="pi pi-trash text-sm"></i>
+                </button>
+              </span>
             </div>
+            <Button v-if="editing?.id && form.videoFileId && !previewUrl" label="Xem trước video" icon="pi pi-play"
+              outlined size="small" class="mt-2 w-full" :loading="previewBusy" @click="loadPreview" />
+            <p v-if="previewErr" class="mt-1 text-xs text-red-500">{{ previewErr }}</p>
+            <p v-else-if="!editing && form.videoFileId && !previewUrl" class="mt-1 text-xs text-neutral-400">
+              Lưu video này trước để xem trước ngay trong form.
+            </p>
             <Dropdown v-model="form.videoFileId" :options="files" option-label="label" option-value="id" editable filter
               :loading="loadingFiles" placeholder="Chọn từ thư viện Tập tin" class="w-full mt-2" />
             <InputText v-model="form.videoFileId" class="w-full mt-1" placeholder="...hoặc nhập ID file thủ công" />
@@ -203,6 +224,28 @@ async function togglePublish(row: any) {
     toast.add({ severity: 'error', summary: 'Lỗi', detail: e?.response?.data?.error?.message || e?.message, life: 3000 });
   }
 }
+// Xem truoc video ngay trong form (chi voi muc da luu - can id de goi API play).
+const previewUrl = ref('');
+const previewBusy = ref(false);
+const previewErr = ref('');
+async function loadPreview() {
+  if (!editing.value?.id) return;
+  previewBusy.value = true; previewErr.value = '';
+  try {
+    const r = await api.get<any>(`/admin/catalog/videos/${editing.value.id}/play`);
+    previewUrl.value = r.hls_path || '';
+    if (!previewUrl.value) previewErr.value = 'Chưa có URL phát cho video này.';
+  } catch (e: any) {
+    previewErr.value = e?.data?.error?.message || 'Video chưa sẵn sàng (chưa gắn file hoặc transcode chưa xong).';
+  } finally { previewBusy.value = false; }
+}
+function clearVideo() {
+  form.value.videoFileId = '';
+  previewUrl.value = ''; previewErr.value = '';
+}
+watch(() => form.value.videoFileId, () => { previewUrl.value = ''; previewErr.value = ''; });
+watch(dlg, (open) => { if (!open) { previewUrl.value = ''; previewErr.value = ''; } });
+
 async function showPlay(row: any) {
   playDlg.value = true; playInfo.value = ''; playError.value = '';
   try { playInfo.value = await playUrl('video', row.id); }

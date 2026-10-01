@@ -48,7 +48,8 @@ const menu = [
   { label: 'Trang chủ', to: '/' },
   { label: 'Phim', to: '/phim' },
   { label: 'Short', to: '/short' },
-  { label: 'Video', to: '/giai-tri' },
+  { label: 'Video', to: '/video' },
+  { label: 'Giải trí', to: '/giai-tri' },
   { label: 'Truyền hình', to: '/truyen-hinh' },
 ];
 

@@ -1,4 +1,5 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { createHash } from 'crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 
 // Catalog CMS theo mau VTCPlay — persist Postgres qua Prisma (bang catalog_items/
@@ -168,6 +169,44 @@ function paginate(all: any[], page?: number, limit?: number): any {
   return { data: all.slice((p - 1) * l, p * l), meta: { page: p, limit: l, total: all.length } };
 }
 
+// --- Cong khai cho web (apps/web): chi noi dung dang xuat ban ---
+// public_id dang 24-hex (sha256) de khop quy uoc URL /short|video/{slug}-{24hex}
+// cua apps/web (utils/url.ts), giong cach channelPublicId lam cho kenh TV.
+export function catalogPublicId(id: string): string {
+  return createHash('sha256').update(`catalog:${id}`).digest('hex').slice(0, 24);
+}
+
+export function slugifyVi(input: string): string {
+  return (input || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'd')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .replace(/-{2,}/g, '-');
+}
+
+// Ban cong khai: chi field hien thi, khong lo videoFileId/upload noi bo.
+export function toPublicItem(item: any): any {
+  if (!item) return item;
+  return {
+    id: item.id,
+    public_id: catalogPublicId(item.id),
+    slug: slugifyVi(item.title || item.name || ''),
+    title: item.title || item.name || '',
+    description: item.description || '',
+    thumbnail: item.thumbnail || item.thumbnailUrl || '',
+    poster: item.posterUrl || '',
+    duration: item.duration ?? null,
+    ageLimit: item.ageLimit ?? null,
+    planId: item.planId ?? null,
+    publishedAt: item.publishedAt ?? null,
+    createdAt: item.createdAt,
+  };
+}
+
 @Injectable()
 export class CatalogService implements OnModuleInit {
   private readonly logger = new Logger(CatalogService.name);
@@ -234,6 +273,22 @@ export class CatalogService implements OnModuleInit {
       all = all.filter((it) => JSON.stringify(it).toLowerCase().includes(q));
     }
     return paginate(all, opts.page, opts.limit);
+  }
+
+  // Web cong khai (/catalog/shorts|videos): chi noi dung dang xuat ban.
+  async listPublic(name: string, opts: { page?: number; limit?: number } = {}): Promise<any> {
+    const res = await this.list(name, { page: 1, limit: 100 });
+    const visible = (res.data || []).filter((it: any) => it.isVisible !== false).map(toPublicItem);
+    return paginate(visible, opts.page, opts.limit);
+  }
+
+  async getPublic(name: string, publicId: string): Promise<any> {
+    const res = await this.list(name, { page: 1, limit: 100 });
+    const found = (res.data || []).find(
+      (it: any) => it.isVisible !== false && catalogPublicId(it.id) === publicId,
+    );
+    if (!found) throw new Error('not found');
+    return toPublicItem(found);
   }
 
   async count(name: string): Promise<number> {

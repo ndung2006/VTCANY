@@ -25,6 +25,7 @@ import { EpgService } from '../content/epg.service';
 import { UploadsService } from '../uploads/uploads.service';
 import { END_USERS } from '../auth/users.store';
 import { CatalogService } from './catalog.service';
+import { VodService, VodKind } from './vod.service';
 
 const ENTITIES = [
   'movies', 'videos', 'shorts', 'genres', 'actors', 'playlists',
@@ -40,6 +41,7 @@ export class CatalogController {
     private audit: AuditService,
     private epg: EpgService,
     private uploads: UploadsService,
+    private vod: VodService,
   ) {}
 
   private actor(req: any) {
@@ -51,6 +53,20 @@ export class CatalogController {
     const code = msg === 'not found' ? 'not_found' : msg === 'unknown entity' ? 'unknown_entity' : 'bad_request';
     const status = msg === 'not found' ? HttpStatus.NOT_FOUND : HttpStatus.BAD_REQUEST;
     throw new HttpException({ error: { code, message: msg } }, status);
+  }
+
+  private vodBad(e: any): never {
+    const msg = e?.message || 'bad request';
+    if (msg === 'not found') {
+      throw new HttpException({ error: { code: 'not_found', message: msg } }, HttpStatus.NOT_FOUND);
+    }
+    if (msg === 'vod not ready') {
+      throw new HttpException(
+        { error: { code: 'vod_not_ready', message: 'video chua san sang (chua gan file hoac transcode chua xong)' } },
+        HttpStatus.NOT_FOUND,
+      );
+    }
+    throw new HttpException({ error: { code: 'bad_request', message: msg } }, HttpStatus.BAD_REQUEST);
   }
 
   private log(req: any, action: string, resource: string, resourceId?: string) {
@@ -120,6 +136,29 @@ export class CatalogController {
   }
 
   @RequirePerms('catalog:write')
+  // Xem truoc VOD ngay trong CMS (ke ca khi chua xuat ban): tra URL playlist ky HMAC.
+  @RequirePerms('catalog:read')
+  @Get('episodes/:id/play')
+  async episodePlay(@Param('id') id: string) {
+    try {
+      return await this.vod.resolvePlay('episode', id, { admin: true });
+    } catch (e: any) {
+      this.vodBad(e);
+    }
+  }
+
+  @RequirePerms('catalog:read')
+  @Get(':entity/:id/play')
+  async itemPlay(@Param('entity') entity: string, @Param('id') id: string) {
+    const kind: VodKind | null = entity === 'shorts' ? 'short' : entity === 'videos' ? 'video' : null;
+    if (!kind) this.bad(new Error('unknown entity'));
+    try {
+      return await this.vod.resolvePlay(kind as VodKind, id, { admin: true });
+    } catch (e: any) {
+      this.vodBad(e);
+    }
+  }
+
   @Post(':entity/:id/publish')
   async publish(@Param('entity') entity: string, @Param('id') id: string, @Req() req: any) {
     try {
