@@ -34,3 +34,32 @@ export function planUpload(filename: string, sizeBytes: number, contentType: str
     createdAt: Date.now(),
   };
 }
+
+// --- Upload anh (thumbnail/poster/banner) ---
+// Chi nhan dinh dang anh pho bien; SVG bi loai vi co the chua script.
+// Anh khong qua transcode: luu thang storage/images, phuc vu cong khai /images/*.
+export const IMAGE_TYPES: Record<string, string> = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+  'image/gif': 'gif',
+  'image/avif': 'avif',
+};
+export const MAX_IMAGE_BYTES = 10 * 1024 * 1024; // 10MB
+
+export interface ImageRecord {
+  id: string;
+  filename: string;
+  sizeBytes: number;
+  contentType: string;
+  fileUrl: string; // /images/<id>.<ext>
+  createdAt: number;
+}
+
+export function planImage(filename: string, contentType: string): { id: string; ext: string } {
+  if (!filename) throw new Error('filename required');
+  const ext = IMAGE_TYPES[(contentType || '').toLowerCase()];
+  if (!ext) throw new Error('unsupported image type');
+  const rand = Math.random().toString(36).slice(2, 8);
+  return { id: `img-${Date.now().toString(36)}-${rand}`, ext };
+}

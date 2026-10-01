@@ -36,6 +36,10 @@ async function bootstrap() {
   const hlsDir = join(storageRoot, 'hls');
   mkdirSync(hlsDir, { recursive: true });
   app.useStaticAssets(hlsDir, { prefix: '/media/' });
+  // Anh thumbnail/poster/banner: noi dung hien thi cong khai nen khong ky HMAC.
+  const imagesDir = join(storageRoot, 'images');
+  mkdirSync(imagesDir, { recursive: true });
+  app.useStaticAssets(imagesDir, { prefix: '/images/' });
   const port = Number(process.env.PORT || 3001);
   await app.listen(port);
   // eslint-disable-next-line no-console

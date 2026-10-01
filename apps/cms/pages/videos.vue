@@ -83,12 +83,7 @@
         <div class="flex flex-col gap-4">
           <div>
             <label class="field-label">Ảnh thumbnail (Tỉ lệ 16:9)</label>
-            <div class="aspect-video bg-neutral-100 dark:bg-neutral-800 rounded-lg overflow-hidden flex items-center justify-center relative">
-              <img v-if="form.thumbnail" :src="form.thumbnail" class="absolute inset-0 w-full h-full object-cover" alt="thumbnail" />
-              <span v-else class="text-xs text-neutral-400 px-2 text-center">Chưa có ảnh (16:9)</span>
-              <Button v-if="form.thumbnail" icon="pi pi-trash" size="small" severity="danger" text class="absolute top-1 right-1" @click="form.thumbnail = ''" />
-            </div>
-            <InputText v-model="form.thumbnail" class="w-full mt-2" placeholder="URL ảnh thumbnail" />
+            <ImagePicker v-model="form.thumbnail" ratio="16/9" />
           </div>
           <div>
             <label class="field-label">Video</label>

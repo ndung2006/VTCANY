@@ -35,6 +35,15 @@ export class UploadsController {
     }
   }
 
+  // Thu vien anh (thumbnail/poster/banner) cho CMS chon lai.
+  // Khai bao TRUOC uploads/:id de khong bi param nuot mat.
+  @UseGuards(PermissionsGuard)
+  @RequirePerms('catalog:read')
+  @Get('uploads/images')
+  listImages() {
+    return { data: this.uploads.listImages() };
+  }
+
   @UseGuards(PermissionsGuard)
   @RequirePerms('video:create')
   @Get('uploads/:id')
@@ -70,6 +79,25 @@ export class UploadsController {
       return { ...rec, next: 'worker transcode p480/p720 -> HLS' };
     } catch (e: any) {
       throw new HttpException(e?.message || 'invalid transition', HttpStatus.BAD_REQUEST);
+    }
+  }
+
+  // Upload anh thumbnail/poster/banner: PUT nhi phan (Content-Type: image/*,
+  // ten file goc o header x-file-name da encodeURIComponent). Khong transcode.
+  @UseGuards(PermissionsGuard)
+  @RequirePerms('catalog:write')
+  @Put('uploads/image')
+  async putImage(@Req() req: Request, @Res() res: Response) {
+    const rawName = (req.headers['x-file-name'] as string) || 'image';
+    let filename = rawName;
+    try { filename = decodeURIComponent(rawName); } catch { /* giu ten tho */ }
+    const contentType = ((req.headers['content-type'] as string) || '').split(';')[0].trim();
+    try {
+      const out = await this.uploads.saveImage(req as any, filename, contentType);
+      res.json(out);
+    } catch (e: any) {
+      const tooLarge = /too large/.test(e?.message || '');
+      res.status(tooLarge ? HttpStatus.PAYLOAD_TOO_LARGE : HttpStatus.BAD_REQUEST).json({ error: e?.message || 'image upload failed' });
     }
   }
 

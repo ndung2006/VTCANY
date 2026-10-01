@@ -3,10 +3,10 @@ import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../prisma/prisma.service';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import { appendFileSync, existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'fs';
+import { appendFileSync, createWriteStream, existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { Readable } from 'stream';
-import { UploadRecord, UploadStatus, chunkCount, planUpload } from './upload.plan';
+import { ImageRecord, MAX_IMAGE_BYTES, UploadRecord, UploadStatus, chunkCount, planImage, planUpload } from './upload.plan';
 import { chunkExists, finalPath, rawDir, storageRootDefault, writeChunk } from './local-store';
 import { enqueueTranscode } from './transcode-queue';
 import { PLAYLIST_TTL_SEC, SEGMENT_TTL_SEC, isValidUploadId, signMedia } from './media-sign';
@@ -23,6 +23,7 @@ export function existsLocalUpload(root: string, uploadId: string): boolean {
 export class UploadsService implements OnModuleInit {
   private readonly logger = new Logger(UploadsService.name);
   private records = new Map<string, UploadRecord>();
+  private images: ImageRecord[] = [];
   private videoHls = new Map<string, { uploadId: string; hlsPath: string }>();
   private s3: S3Client | null = null;
   private bucket: string;
@@ -52,6 +53,17 @@ export class UploadsService implements OnModuleInit {
     try {
       const rows = await this.prisma.mediaAsset.findMany({ orderBy: { createdAt: 'asc' } });
       for (const r of rows) {
+        if (r.fileType === 'image') {
+          this.images.push({
+            id: r.id,
+            filename: r.filename || r.id,
+            sizeBytes: Number(r.sizeBytes || 0),
+            contentType: r.contentType || 'image/jpeg',
+            fileUrl: r.fileUrl || '',
+            createdAt: r.createdAt.getTime(),
+          });
+          continue;
+        }
         const rec: UploadRecord = {
           id: r.id,
           filename: r.filename || r.id,
@@ -153,6 +165,67 @@ export class UploadsService implements OnModuleInit {
         transcode: done ? 'done' : rec.status === 'error' ? 'error' : rec.status === 'uploaded' || rec.status === 'processing' ? 'processing' : 'pending',
       };
     });
+  }
+
+  // --- Anh thumbnail/poster/banner: luu thang storage/images, khong transcode ---
+  imagesDir(): string {
+    return join(this.storageRoot(), 'images');
+  }
+
+  private publicBase(): string {
+    return (this.config.get<string>('VOD_PUBLIC_BASE_URL', '') || '').replace(/\/$/, '');
+  }
+
+  imageUrl(rec: ImageRecord): string {
+    return (this.publicBase() || '') + rec.fileUrl;
+  }
+
+  listImages(): (ImageRecord & { url: string })[] {
+    return [...this.images]
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .map((r) => ({ ...r, url: this.imageUrl(r) }));
+  }
+
+  async saveImage(stream: Readable, filename: string, contentType: string): Promise<ImageRecord & { url: string }> {
+    const { id, ext } = planImage(filename, contentType);
+    const dir = this.imagesDir();
+    mkdirSync(dir, { recursive: true });
+    const filePath = join(dir, `${id}.${ext}`);
+    let bytes = 0;
+    try {
+      const out = createWriteStream(filePath);
+      for await (const chunk of stream as AsyncIterable<Buffer>) {
+        bytes += (chunk as Buffer).length;
+        if (bytes > MAX_IMAGE_BYTES) throw new Error('image too large (max 10MB)');
+        out.write(chunk);
+      }
+      await new Promise<void>((resolve, reject) => {
+        out.end(() => resolve());
+        out.on('error', reject);
+      });
+    } catch (e) {
+      try { unlinkSync(filePath); } catch { /* chua kip tao file */ }
+      throw e;
+    }
+    const rec: ImageRecord = {
+      id,
+      filename,
+      sizeBytes: bytes,
+      contentType: (contentType || '').toLowerCase(),
+      fileUrl: `/images/${id}.${ext}`,
+      createdAt: Date.now(),
+    };
+    this.images.push(rec);
+    if (this.prisma && process.env.DATABASE_URL) {
+      void this.prisma.mediaAsset
+        .upsert({
+          where: { id },
+          create: { id, filename, sizeBytes: BigInt(bytes), contentType: rec.contentType, status: 'done', fileType: 'image', fileUrl: rec.fileUrl },
+          update: { filename, sizeBytes: BigInt(bytes), contentType: rec.contentType, status: 'done', fileType: 'image', fileUrl: rec.fileUrl },
+        })
+        .catch((err) => this.logger.warn(`persist image ${id} loi: ${(err as Error).message}`));
+    }
+    return { ...rec, url: this.imageUrl(rec) };
   }
 
   // Browser bao upload xong (hoac storage webhook) -> chuyen Uploaded, san sang worker.

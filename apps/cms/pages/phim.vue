@@ -61,8 +61,8 @@
           <Dropdown v-model="form.distribution" :options="distOptions" option-label="label" option-value="value" class="w-full" />
         </div>
         <div><label class="field-label">Giá mua lẻ (VNĐ)</label><InputNumber v-model="form.price" class="w-full" :disabled="form.distribution === 'free'" /></div>
-        <div class="col-span-2"><label class="field-label">Poster (2:3, URL)</label><InputText v-model="form.posterUrl" class="w-full" /></div>
-        <div class="col-span-2"><label class="field-label">Thumbnail (16:9, URL)</label><InputText v-model="form.thumbnailUrl" class="w-full" /></div>
+        <div class="col-span-2"><label class="field-label">Poster (2:3)</label><ImagePicker v-model="form.posterUrl" compact /></div>
+        <div class="col-span-2"><label class="field-label">Thumbnail (16:9)</label><ImagePicker v-model="form.thumbnailUrl" compact /></div>
         <div class="col-span-2 flex flex-wrap gap-4">
           <div class="flex items-center gap-2"><Checkbox v-model="form.hasSubtitle" binary input-id="msub" /><label for="msub">Phụ đề</label></div>
           <div class="flex items-center gap-2"><Checkbox v-model="form.hasDubbing" binary input-id="mdub" /><label for="mdub">Thuyết minh</label></div>
@@ -112,7 +112,7 @@
           </div>
           <div><label class="field-label">Phụ đề EN (URL file)</label><InputText v-model="epForm.subtitleEn" class="w-full" /></div>
           <div><label class="field-label">Phụ đề VI (URL file)</label><InputText v-model="epForm.subtitleVi" class="w-full" /></div>
-          <div class="col-span-2"><label class="field-label">Thumbnail (URL)</label><InputText v-model="epForm.thumbnail" class="w-full" /></div>
+          <div class="col-span-2"><label class="field-label">Thumbnail</label><ImagePicker v-model="epForm.thumbnail" compact /></div>
           <div><label class="field-label">Phân phối</label>
             <Dropdown v-model="epForm.distribution" :options="epDistOptions" option-label="label" option-value="value" class="w-full" />
           </div>
