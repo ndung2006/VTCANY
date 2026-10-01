@@ -115,7 +115,8 @@
     </div>
 
     <!-- Dialog cap nhat truyen hinh / su kien (mau VTCPlay) -->
-    <Dialog v-model:visible="chDlg" modal :header="chEditing?.source === 'custom' && !chEditing?.key ? 'Thêm truyền hình / sự kiện' : 'Cập nhật truyền hình / sự kiện'" class="w-full max-w-6xl">
+    <Dialog v-model:visible="chDlg" modal :header="chEditing?.source === 'custom' && !chEditing?.key ? 'Thêm truyền hình / sự kiện' : 'Cập nhật truyền hình / sự kiện'" class="w-[95vw] max-w-6xl">
+      <div class="max-h-[calc(100dvh_-_190px)] overflow-y-auto pr-2">
       <div class="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-5">
         <div class="flex flex-col gap-3">
           <div><label class="field-label">Tên (bắt buộc)</label>
@@ -164,6 +165,7 @@
             <InputText v-model="chForm.bannerUrl" class="w-full mt-2" placeholder="URL ảnh banner player" />
           </div>
         </div>
+      </div>
       </div>
       <template #footer>
         <Button label="Đóng" text @click="chDlg = false" />

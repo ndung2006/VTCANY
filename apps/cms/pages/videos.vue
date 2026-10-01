@@ -38,7 +38,8 @@
       </DataTable>
     </div>
 
-    <Dialog v-model:visible="dlg" modal :header="editing ? 'Cập nhật video' : 'Thêm video'" class="w-full max-w-6xl">
+    <Dialog v-model:visible="dlg" modal :header="editing ? 'Cập nhật video' : 'Thêm video'" class="w-[95vw] max-w-6xl">
+      <div class="max-h-[calc(100dvh_-_190px)] overflow-y-auto pr-2">
       <div class="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-5">
         <!-- Cot trai: thong tin -->
         <div class="flex flex-col gap-3">
@@ -102,6 +103,7 @@
             <div class="mt-3"><MediaUploader @done="onUploadDone" /></div>
           </div>
         </div>
+      </div>
       </div>
       <template #footer>
         <Button label="Đóng" text @click="dlg = false" />

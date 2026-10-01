@@ -37,10 +37,11 @@
       </DataTable>
     </div>
 
-    <Dialog v-model:visible="dlg" modal :header="editing ? 'Sửa short' : 'Thêm short'" class="w-full max-w-6xl">
-      <div class="grid grid-cols-1 lg:grid-cols-[1fr_210px_250px] gap-5">
+    <Dialog v-model:visible="dlg" modal :header="editing ? 'Sửa short' : 'Thêm short'" class="w-[95vw] max-w-6xl">
+      <div class="max-h-[calc(100dvh_-_190px)] overflow-y-auto pr-2">
+      <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_220px_260px] gap-5">
         <!-- Cot trai: thong tin -->
-        <div class="flex flex-col gap-3">
+        <div class="flex flex-col gap-3 md:col-span-2 xl:col-span-1">
           <div><label class="field-label">Tên (bắt buộc)</label><InputText v-model="form.title" class="w-full" /></div>
           <div><label class="field-label">Mô tả</label><Textarea v-model="form.description" rows="4" class="w-full" /></div>
           <div><label class="field-label">Danh mục</label>
@@ -99,6 +100,7 @@
             <MediaUploader @done="onUploadDone" />
           </div>
         </div>
+      </div>
       </div>
       <template #footer>
         <Button label="Đóng" text @click="dlg = false" />
