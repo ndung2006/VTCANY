@@ -22,6 +22,7 @@ import { PermissionsGuard } from '../auth/permissions.guard';
 import { RequirePerms } from '../auth/permissions.decorator';
 import { AuditService } from '../audit/audit.service';
 import { EpgService } from '../content/epg.service';
+import { parseEpgFile, buildEpgTemplateXlsx } from '../content/epg-file';
 import { UploadsService } from '../uploads/uploads.service';
 import { END_USERS } from '../auth/users.store';
 import { CatalogService } from './catalog.service';
@@ -214,10 +215,16 @@ export class CatalogController {
     };
   }
 
-  // ---- EPG: template + import CSV ----
+  // ---- EPG: template + import Excel/CSV ----
   @RequirePerms('epg:read')
   @Get('epg/template')
-  template(@Res() res: Response) {
+  template(@Res() res: Response, @Query('format') format?: string) {
+    if (format === 'xlsx') {
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', 'attachment; filename="epg-template.xlsx"');
+      res.send(buildEpgTemplateXlsx());
+      return;
+    }
     const csv = 'ten_chuong_trinh,noi_dung,bat_dau,ket_thuc,xem_lai\n"Thoi su 19h","Ban tin thoi su",19:00,19:45,1\n"Phim truyen","Tap 12",20:00,21:00,0\n';
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', 'attachment; filename="epg-template.csv"');
@@ -230,23 +237,11 @@ export class CatalogController {
   importEpg(@Param('id') id: string, @UploadedFile() file: any, @Query('date') date: string, @Req() req: any) {
     try {
       if (!file?.buffer) throw new Error('file is required (multipart field "file")');
-      const text = file.buffer.toString('utf8').replace(/^\uFEFF/, '');
-      const lines = text.split(/\r?\n/).filter((l: string) => l.trim());
-      if (lines.length < 2) throw new Error('file trong hoac thieu dong tieu de');
-      const items = lines.slice(1).map((line: string) => {
-        // CSV don gian: ho tro dau phay trong ngoac kep
-        const cols = line.match(/(".*?"|[^",]+)(?=\s*,|\s*$)/g)?.map((c) => c.replace(/^"|"$/g, '').trim()) || [];
-        return {
-          title: cols[0] || 'Chuong trinh',
-          description: cols[1] || '',
-          time: cols[2] || '00:00',
-          end: cols[3] || '',
-          status: cols[4] === '1' ? 'REPLAY' : 'UPCOMING',
-        } as any;
-      });
+      // Tu nhan dien .xlsx that (ZIP) hoac CSV theo magic bytes.
+      const { format, items } = parseEpgFile(file.buffer, file.originalname || '');
       const saved = this.epg.set(id, items, date);
       this.log(req, 'import', 'epg', id);
-      return { ok: true, channelId: id, date: date || 'default', imported: saved.length };
+      return { ok: true, channelId: id, date: date || 'default', imported: saved.length, format };
     } catch (e) { this.bad(e); }
   }
 

@@ -9,7 +9,7 @@
     "seed": "ts-node src/seed/seed.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate deploy",
-    "test": "npm run build && node --test public-catalog.test.mjs aio-client.test.mjs telemetry.test.mjs hardening.test.mjs uploads.test.mjs standardize.test.mjs layout.test.mjs movies.test.mjs tv-search.test.mjs vod.test.mjs tv-overrides.test.mjs image-upload.test.mjs"
+    "test": "npm run build && node --test public-catalog.test.mjs epg-import.test.mjs aio-client.test.mjs telemetry.test.mjs hardening.test.mjs uploads.test.mjs standardize.test.mjs layout.test.mjs movies.test.mjs tv-search.test.mjs vod.test.mjs tv-overrides.test.mjs image-upload.test.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1141.0",
@@ -25,7 +25,8 @@
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.1"
+    "rxjs": "^7.8.1",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@types/express": "^4.17.21",

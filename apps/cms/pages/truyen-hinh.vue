@@ -164,11 +164,11 @@
     </Dialog>
 
     <!-- Dialog nhập Excel EPG -->
-    <Dialog v-model:visible="impDlg" modal header="Nhập lịch từ file Excel (CSV)" class="w-full max-w-md">
+    <Dialog v-model:visible="impDlg" modal header="Nhập lịch từ file Excel/CSV" class="w-full max-w-md">
       <div class="flex flex-col gap-3">
         <p class="text-sm text-neutral-400">Kênh: <b class="text-neutral-200">{{ selected?.displayName || selected?.name }}</b> — Ngày: <b class="text-neutral-200">{{ dateStr() }}</b></p>
-        <div><label class="field-label">File CSV (theo mẫu)</label>
-          <input type="file" accept=".csv" class="w-full text-sm" @change="(e: any) => impFile = e.target.files?.[0] || null" />
+        <div><label class="field-label">File Excel (.xlsx) hoặc CSV (theo mẫu)</label>
+          <input type="file" accept=".xlsx,.csv" class="w-full text-sm" @change="(e: any) => impFile = e.target.files?.[0] || null" />
         </div>
       </div>
       <template #footer>
@@ -347,14 +347,14 @@ async function save() {
 async function downloadTemplate() {
   try {
     const base = (useRuntimeConfig().public.apiBase as string).replace(/\/$/, '');
-    const blob = await $fetch<Blob>(`${base}/admin/catalog/epg/template`, {
+    const blob = await $fetch<Blob>(`${base}/admin/catalog/epg/template?format=xlsx`, {
       headers: authHeaders(),
       responseType: 'blob',
     });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'epg-template.csv';
+    a.download = 'epg-template.xlsx';
     a.click();
     URL.revokeObjectURL(url);
   } catch {

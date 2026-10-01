@@ -349,11 +349,13 @@ export class CatalogService implements OnModuleInit {
   // ---- Settings (key-value, bang catalog_settings) ----
   async getSettings(): Promise<Record<string, string>> {
     const rows = await this.prisma.catalogSetting.findMany();
-    return Object.fromEntries(rows.map((r) => [r.key, r.value]));
+    // Khoa noi bo (epg:...) dung chung bang nhung khong phai cau hinh CMS.
+    return Object.fromEntries(rows.filter((r) => !r.key.startsWith('epg:')).map((r) => [r.key, r.value]));
   }
 
   async putSettings(patch: Record<string, string>): Promise<Record<string, string>> {
     for (const [k, v] of Object.entries(patch || {})) {
+      if (k.startsWith('epg:')) continue; // khoa noi bo, chi EpgService duoc ghi
       await this.prisma.catalogSetting.upsert({
         where: { key: k },
         create: { key: k, value: String(v) },
