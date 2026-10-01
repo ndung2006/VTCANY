@@ -28,6 +28,13 @@ class RefreshDto {
   refresh_token!: string;
 }
 
+class ChangePasswordDto {
+  @IsString()
+  currentPassword!: string;
+  @IsString()
+  newPassword!: string;
+}
+
 @Controller('auth')
 export class AuthController {
   constructor(private auth: AuthService) {}
@@ -66,12 +73,34 @@ export class AuthController {
     }
   }
 
+  // Đổi mật khẩu tài khoản CMS đang đăng nhập (ghi Postgres, bền qua restart).
+  @UseGuards(JwtAuthGuard)
+  @Post('admin/change-password')
+  async changePassword(@Req() req: any, @Body() dto: ChangePasswordDto) {
+    const payload = req.user;
+    if (!payload || !(payload.kind === 'cms' || payload.role)) {
+      throw new HttpException('forbidden', HttpStatus.FORBIDDEN);
+    }
+    try {
+      return await this.auth.changePassword(payload.sub, dto.currentPassword, dto.newPassword);
+    } catch (e: any) {
+      const msg = e?.message || 'change password failed';
+      if (msg === 'weak password' || msg === 'password unchanged') {
+        throw new HttpException(msg, HttpStatus.BAD_REQUEST);
+      }
+      if (msg === 'current password incorrect' || msg === 'account not found') {
+        throw new HttpException(msg, HttpStatus.UNAUTHORIZED);
+      }
+      throw new HttpException(msg, HttpStatus.BAD_REQUEST);
+    }
+  }
+
   // Bước 2: GET /api/v1/auth/me — thông tin user hiện tại.
   @UseGuards(JwtAuthGuard)
   @Get('me')
-  me(@Req() req: any) {
+  async me(@Req() req: any) {
     try {
-      return this.auth.me(req.user);
+      return await this.auth.me(req.user);
     } catch {
       throw new HttpException('account not found', HttpStatus.UNAUTHORIZED);
     }

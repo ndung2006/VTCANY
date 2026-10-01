@@ -1,36 +1,147 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit, Optional } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import { randomBytes, randomUUID } from 'crypto';
-import { END_USERS, EndUser, OAuthProvider, PROFILES, SESSIONS, USERS, isOAuthProvider, permissionsFor } from './users.store';
+import { END_USERS, EndUser, OAuthProvider, PROFILES, SESSIONS, USERS, CmsUser, Role, isOAuthProvider, permissionsFor } from './users.store';
+import { PrismaService } from '../../prisma/prisma.service';
 
 const REFRESH_TTL_MS = 7 * 24 * 3600 * 1000;
 const ACCESS_TTL_S = 3600;
 
-// Store in-memory. Len Postgres/Redis: users/user_profiles/user_sessions +
-// refresh token hash + expiry + reuse detection.
+// Admin CMS: uu tien Postgres (bang admin_users, seed tu USERS khi bang trong) de
+// doi mat khau ben vung qua restart; khong co DB (dev/test) thi dung store in-memory.
+// End-user OAuth van in-memory (users/user_profiles/user_sessions trong migration 0001).
 @Injectable()
-export class AuthService {
+export class AuthService implements OnModuleInit {
+  private readonly logger = new Logger(AuthService.name);
   private refreshTokens = new Map<string, { userId: string; kind: 'cms' | 'enduser'; exp: number }>();
+  private dbSeeded = false;
+  private dbDown = false;
 
-  constructor(private jwt: JwtService) {}
+  constructor(
+    private jwt: JwtService,
+    @Optional() private prisma?: PrismaService,
+  ) {}
+
+  async onModuleInit(): Promise<void> {
+    await this.ensureDbSeed();
+  }
+
+  // Seed admin mac dinh vao Postgres khi bang admin_users con trong. Id giu nguyen
+  // cua store in-memory de token/lien ket cu khong bi lech.
+  private async ensureDbSeed(): Promise<void> {
+    if (!this.prisma || this.dbSeeded || this.dbDown) return;
+    try {
+      const count = await this.prisma.adminUser.count();
+      if (count === 0) {
+        for (const u of USERS) {
+          await this.prisma.adminUser.create({
+            data: {
+              id: u.id,
+              username: u.username,
+              email: u.email ?? null,
+              passwordHash: u.passwordHash,
+              fullName: u.fullName ?? null,
+              roleName: u.role,
+              status: 'active',
+            },
+          });
+        }
+        this.logger.log(`Da seed ${USERS.length} tai khoan admin vao Postgres.`);
+      }
+      this.dbSeeded = true;
+    } catch (e) {
+      this.dbDown = true;
+      this.logger.warn(`Bo qua admin DB (dung store in-memory): ${(e as Error).message}`);
+    }
+  }
+
+  private rowToUser(row: any): CmsUser {
+    return {
+      id: row.id,
+      username: row.username || row.email || row.id,
+      email: row.email ?? undefined,
+      passwordHash: row.passwordHash,
+      fullName: row.fullName ?? undefined,
+      role: (row.roleName as Role) || 'admin',
+    };
+  }
+
+  // Tim tai khoan CMS: DB truoc (neu co), fallback in-memory. status != active -> null.
+  private async findCmsUser(where: { id?: string; email?: string; username?: string }): Promise<{ user: CmsUser; source: 'db' | 'memory' } | null> {
+    if (this.prisma && !this.dbDown) {
+      try {
+        await this.ensureDbSeed();
+        const row = await this.prisma.adminUser.findFirst({
+          where: where.id
+            ? { id: where.id }
+            : where.email
+              ? { email: { equals: where.email, mode: 'insensitive' } }
+              : { username: where.username },
+        });
+        if (row) {
+          if (row.status !== 'active') return null;
+          return { user: this.rowToUser(row), source: 'db' };
+        }
+      } catch (e) {
+        this.dbDown = true;
+        this.logger.warn(`Admin DB loi, fallback in-memory: ${(e as Error).message}`);
+      }
+    }
+    const mem = USERS.find((u) =>
+      where.id ? u.id === where.id
+        : where.email ? (u.email || '').toLowerCase() === (where.email || '').toLowerCase()
+          : u.username === where.username,
+    );
+    return mem ? { user: mem, source: 'memory' } : null;
+  }
 
   // ---- CMS username login (giữ tương thích app/CMS hiện tại) ----
   async login(username: string, password: string) {
-    const user = USERS.find((u) => u.username === username);
-    if (!user) throw new Error('invalid credentials');
-    const ok = await bcrypt.compare(password, user.passwordHash);
+    const found = await this.findCmsUser({ username });
+    if (!found) throw new Error('invalid credentials');
+    const ok = await bcrypt.compare(password, found.user.passwordHash);
     if (!ok) throw new Error('invalid credentials');
-    return this.issueCmsPair(user.id, user.username, user.role);
+    await this.touchLastLogin(found);
+    return this.issueCmsPair(found.user.id, found.user.username, found.user.role);
   }
 
   // ---- Bước 2: POST /auth/admin/login {email, password} ----
   async adminLogin(email: string, password: string) {
-    const user = USERS.find((u) => (u.email || '').toLowerCase() === (email || '').toLowerCase());
-    if (!user) throw new Error('invalid credentials');
-    const ok = await bcrypt.compare(password, user.passwordHash);
+    const found = await this.findCmsUser({ email });
+    if (!found) throw new Error('invalid credentials');
+    const ok = await bcrypt.compare(password, found.user.passwordHash);
     if (!ok) throw new Error('invalid credentials');
-    return this.issueCmsPair(user.id, user.username, user.role);
+    await this.touchLastLogin(found);
+    return this.issueCmsPair(found.user.id, found.user.username, found.user.role);
+  }
+
+  private async touchLastLogin(found: { user: CmsUser; source: 'db' | 'memory' }): Promise<void> {
+    if (found.source !== 'db' || !this.prisma) return;
+    await this.prisma.adminUser
+      .update({ where: { id: found.user.id }, data: { lastLogin: new Date() } })
+      .catch(() => undefined);
+  }
+
+  // ---- Đổi mật khẩu admin: ghi DB (bền qua restart), thu hồi refresh token cũ ----
+  async changePassword(userId: string, currentPassword: string, newPassword: string) {
+    if (newPassword && newPassword === currentPassword) throw new Error('password unchanged');
+    if (!newPassword || newPassword.length < 10) throw new Error('weak password');
+    const found = await this.findCmsUser({ id: userId });
+    if (!found) throw new Error('account not found');
+    const ok = await bcrypt.compare(currentPassword || '', found.user.passwordHash);
+    if (!ok) throw new Error('current password incorrect');
+    const hash = await bcrypt.hash(newPassword, 10);
+    if (found.source === 'db' && this.prisma) {
+      await this.prisma.adminUser.update({ where: { id: found.user.id }, data: { passwordHash: hash } });
+    }
+    const mem = USERS.find((u) => u.id === found.user.id);
+    if (mem) mem.passwordHash = hash;
+    for (const [tok, rec] of this.refreshTokens) {
+      if (rec.userId === found.user.id && rec.kind === 'cms') this.refreshTokens.delete(tok);
+    }
+    this.logger.log(`Admin ${found.user.username} da doi mat khau.`);
+    return { ok: true };
   }
 
   // ---- Bước 2: POST /auth/oauth/:provider {idToken} ----
@@ -63,11 +174,12 @@ export class AuthService {
   }
 
   // ---- Bước 2: GET /auth/me ----
-  me(payload: any) {
+  async me(payload: any) {
     if (!payload) throw new Error('invalid token');
     if (payload.kind === 'cms' || payload.role) {
-      const user = USERS.find((u) => u.id === payload.sub);
-      if (!user) throw new Error('account not found');
+      const found = await this.findCmsUser({ id: payload.sub });
+      if (!found) throw new Error('account not found');
+      const user = found.user;
       return {
         kind: 'cms' as const,
         user: { id: user.id, username: user.username, email: user.email, fullName: user.fullName, role: user.role },
@@ -85,9 +197,9 @@ export class AuthService {
     this.refreshTokens.delete(refreshToken);
     if (!rec || rec.exp < Date.now()) throw new Error('invalid refresh token');
     if (rec.kind === 'cms') {
-      const user = USERS.find((u) => u.id === rec.userId);
-      if (!user) throw new Error('invalid refresh token');
-      return this.issueCmsPair(user.id, user.username, user.role);
+      const found = await this.findCmsUser({ id: rec.userId });
+      if (!found) throw new Error('invalid refresh token');
+      return this.issueCmsPair(found.user.id, found.user.username, found.user.role);
     }
     const user = END_USERS.find((u) => u.id === rec.userId);
     if (!user || user.status !== 'active') throw new Error('invalid refresh token');

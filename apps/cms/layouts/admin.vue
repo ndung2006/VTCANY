@@ -23,6 +23,7 @@
           <Button :icon="dark ? 'pi pi-sun' : 'pi pi-moon'" text rounded @click="toggleDark" aria-label="Đổi giao diện" />
           <span class="text-sm text-neutral-400">{{ displayName }}</span>
           <Tag :value="role || 'admin'" severity="info" />
+          <Button label="Đổi mật khẩu" icon="pi pi-key" size="small" severity="secondary" outlined @click="openPw" />
           <Button label="Đăng xuất" icon="pi pi-sign-out" size="small" severity="danger" outlined @click="logout" />
         </div>
       </header>
@@ -32,12 +33,79 @@
     </div>
     <Toast />
     <ConfirmDialog />
+    <Dialog v-model:visible="pwDlg" modal header="Đổi mật khẩu" class="w-full max-w-md">
+      <div class="flex flex-col gap-3">
+        <div>
+          <label class="field-label">Mật khẩu hiện tại</label>
+          <Password v-model="pwForm.current" class="w-full" input-class="w-full" toggle-mask :feedback="false"
+            placeholder="••••••••" autocomplete="current-password" />
+        </div>
+        <div>
+          <label class="field-label">Mật khẩu mới (ít nhất 10 ký tự)</label>
+          <Password v-model="pwForm.next" class="w-full" input-class="w-full" toggle-mask :feedback="false"
+            placeholder="••••••••" autocomplete="new-password" />
+        </div>
+        <div>
+          <label class="field-label">Nhập lại mật khẩu mới</label>
+          <Password v-model="pwForm.confirm" class="w-full" input-class="w-full" toggle-mask :feedback="false"
+            placeholder="••••••••" autocomplete="new-password" @keyup.enter="submitPw" />
+        </div>
+      </div>
+      <template #footer>
+        <Button label="Huỷ" severity="secondary" outlined @click="pwDlg = false" />
+        <Button label="Đổi mật khẩu" icon="pi pi-check" :loading="pwBusy" @click="submitPw" />
+      </template>
+    </Dialog>
   </div>
 </template>
 
 <script setup lang="ts">
 const { user, role, logout, dark, toggleDark } = useCmsAuth();
+const api = useApi();
+const toast = useToast();
 const route = useRoute();
+
+// Đổi mật khẩu admin: API ghi Postgres (bền qua restart) + thu hồi refresh token,
+// nên đổi xong đăng xuất để đăng nhập lại bằng mật khẩu mới.
+const pwDlg = ref(false);
+const pwBusy = ref(false);
+const pwForm = reactive({ current: '', next: '', confirm: '' });
+function openPw() {
+  pwForm.current = '';
+  pwForm.next = '';
+  pwForm.confirm = '';
+  pwDlg.value = true;
+}
+async function submitPw() {
+  if (!pwForm.current || !pwForm.next) {
+    toast.add({ severity: 'warn', summary: 'Thiếu thông tin', detail: 'Nhập mật khẩu hiện tại và mật khẩu mới', life: 3000 });
+    return;
+  }
+  if (pwForm.next.length < 10) {
+    toast.add({ severity: 'warn', summary: 'Mật khẩu yếu', detail: 'Mật khẩu mới phải có ít nhất 10 ký tự', life: 3000 });
+    return;
+  }
+  if (pwForm.next !== pwForm.confirm) {
+    toast.add({ severity: 'warn', summary: 'Chưa khớp', detail: 'Mật khẩu nhập lại không khớp', life: 3000 });
+    return;
+  }
+  pwBusy.value = true;
+  try {
+    await api.post('/auth/admin/change-password', { currentPassword: pwForm.current, newPassword: pwForm.next });
+    pwDlg.value = false;
+    toast.add({ severity: 'success', summary: 'Xong', detail: 'Đã đổi mật khẩu. Đăng nhập lại bằng mật khẩu mới.', life: 4000 });
+    logout();
+  } catch (e: any) {
+    const msg = e?.response?.data?.error?.message || e?.message || '';
+    const detail = msg === 'current password incorrect' ? 'Mật khẩu hiện tại không đúng'
+      : msg === 'password unchanged' ? 'Mật khẩu mới phải khác mật khẩu hiện tại'
+      : msg === 'weak password' ? 'Mật khẩu mới phải có ít nhất 10 ký tự'
+      : 'Đổi mật khẩu thất bại';
+    toast.add({ severity: 'error', summary: 'Lỗi', detail, life: 3000 });
+  } finally {
+    pwBusy.value = false;
+  }
+}
 
 const groups = [
   {

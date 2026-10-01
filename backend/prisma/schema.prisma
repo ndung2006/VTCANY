@@ -245,10 +245,12 @@ model UserSession {
 
 model AdminUser {
   id           String     @id @default(uuid())
-  email        String     @unique
+  email        String?    @unique
+  username     String?    @unique
   passwordHash String     @map("password_hash")
   fullName     String?    @map("full_name")
   roleId       String?    @map("role_id")
+  roleName     String?    @map("role_name")
   role         Role?      @relation(fields: [roleId], references: [id])
   status       String     @default("active") // active|disabled
   lastLogin    DateTime?  @map("last_login")
