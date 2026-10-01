@@ -68,7 +68,13 @@ export interface ChannelOverrideLite {
   hlsUrl?: string | null;
   dashUrl?: string | null;
   catchupHlsUrl?: string | null;
+  useAioEpg?: boolean;
   isCustom?: boolean;
+}
+
+// Kênh được phép lấy EPG từ AIO hay không (mặc định có; chỉ tắt khi admin chọn).
+export function aioEpgAllowed(override?: ChannelOverrideLite | null): boolean {
+  return override?.useAioEpg !== false;
 }
 
 export interface TvChannelItemOut {

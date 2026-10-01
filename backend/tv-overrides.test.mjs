@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { applyChannelOverrides, channelKeyOf } from './dist/modules/tv/tv.catalog.js';
+import { aioEpgAllowed, applyChannelOverrides, channelKeyOf } from './dist/modules/tv/tv.catalog.js';
 
 const AIO = [
   { name: 'VTV1', audioOnly: false },
@@ -48,6 +48,14 @@ test('kenh tu them (isCustom) xuat hien, ke ca khi AIO khong co', () => {
   assert.ok(custom);
   assert.equal(custom.name, 'Kênh truyền hình LTV2');
   assert.equal(all.length, 5);
+});
+
+test('aioEpgAllowed: mac dinh lay EPG AIO, chi tat khi useAioEpg=false', () => {
+  assert.equal(aioEpgAllowed(null), true);
+  assert.equal(aioEpgAllowed(undefined), true);
+  assert.equal(aioEpgAllowed({ channelKey: 'VTV1' }), true);
+  assert.equal(aioEpgAllowed({ channelKey: 'VTV1', useAioEpg: true }), true);
+  assert.equal(aioEpgAllowed({ channelKey: 'VTV1', useAioEpg: false }), false);
 });
 
 test('kenh tu them bi an khi isVisible=false; key khong phan biet hoa thuong', () => {

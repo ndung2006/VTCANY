@@ -40,6 +40,9 @@
         <Column header="Thứ tự" style="width:6rem">
           <template #body="{ data }">{{ data.sortOrder ?? '—' }}</template>
         </Column>
+        <Column header="EPG AIO" style="width:7rem">
+          <template #body="{ data }"><Tag :value="data.useAioEpg !== false ? 'Lấy' : 'Không lấy'" :severity="data.useAioEpg !== false ? 'info' : 'secondary'" /></template>
+        </Column>
         <Column header="Hiển thị" style="width:7rem">
           <template #body="{ data }"><Tag :value="data.isVisible ? 'Bật' : 'Ẩn'" :severity="data.isVisible ? 'success' : 'danger'" /></template>
         </Column>
@@ -136,6 +139,10 @@
             <div><label class="field-label">Thứ tự hiển thị</label><InputNumber v-model="chForm.sortOrder" class="w-full" placeholder="Tự động" /></div>
             <div class="flex items-end gap-2 pb-2"><Checkbox v-model="chForm.isVisible" binary input-id="chvis" /><label for="chvis">Hiển thị kênh</label></div>
           </div>
+          <div class="flex items-center gap-2">
+            <Checkbox v-model="chForm.useAioEpg" binary input-id="chepg" /><label for="chepg">Lấy EPG từ VTC AIO</label>
+            <span class="text-xs text-neutral-500">(tắt = chỉ dùng lịch phát sóng nhập tay trong CMS)</span>
+          </div>
         </div>
         <div class="flex flex-col gap-4">
           <div>
@@ -226,7 +233,7 @@ async function loadPlans() {
 const chDlg = ref(false);
 const chEditing = ref<any>(null);
 const chSaving = ref(false);
-const emptyChForm = () => ({ displayName: '', description: '', groupName: null as any, planId: null as any, hlsUrl: '', dashUrl: '', catchupHlsUrl: '', logoUrl: '', bannerUrl: '', sortOrder: null as number | null, isVisible: true });
+const emptyChForm = () => ({ displayName: '', description: '', groupName: null as any, planId: null as any, hlsUrl: '', dashUrl: '', catchupHlsUrl: '', logoUrl: '', bannerUrl: '', sortOrder: null as number | null, isVisible: true, useAioEpg: true });
 const chForm = ref(emptyChForm());
 
 function fillChForm(c: any) {
@@ -235,7 +242,7 @@ function fillChForm(c: any) {
     groupName: c.groupName ?? null, planId: c.planId ?? null,
     hlsUrl: c.hlsUrl || '', dashUrl: c.dashUrl || '', catchupHlsUrl: c.catchupHlsUrl || '',
     logoUrl: c.logoUrl || '', bannerUrl: c.bannerUrl || '',
-    sortOrder: c.sortOrder ?? null, isVisible: c.isVisible !== false,
+    sortOrder: c.sortOrder ?? null, isVisible: c.isVisible !== false, useAioEpg: c.useAioEpg !== false,
   };
 }
 function openEditChannel(c: any) { chEditing.value = c; fillChForm(c); chDlg.value = true; loadPlans(); }
@@ -256,7 +263,7 @@ async function saveChannel() {
         groupName: f.groupName || null, planId: f.planId || null,
         hlsUrl: f.hlsUrl.trim() || null, dashUrl: f.dashUrl.trim() || null, catchupHlsUrl: f.catchupHlsUrl.trim() || null,
         logoUrl: f.logoUrl.trim() || null, bannerUrl: f.bannerUrl.trim() || null,
-        sortOrder: f.sortOrder, isVisible: f.isVisible, isCustom: chEditing.value?.source === 'custom',
+        sortOrder: f.sortOrder, isVisible: f.isVisible, useAioEpg: f.useAioEpg, isCustom: chEditing.value?.source === 'custom',
     });
     toast.add({ severity: 'success', summary: 'Đã lưu cài đặt kênh', life: 2500 });
     chDlg.value = false;

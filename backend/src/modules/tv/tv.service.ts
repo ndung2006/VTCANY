@@ -4,6 +4,7 @@ import { EpgService } from '../content/epg.service';
 import { mapEpgSchedule } from '../playback/aio-client';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
+  aioEpgAllowed,
   applyChannelOverrides,
   channelKeyOf,
   channelPublicId,
@@ -20,7 +21,7 @@ export interface TvChannelItem {
 
 const OVERRIDE_FIELDS = [
   'isVisible', 'sortOrder', 'groupName', 'displayName', 'description',
-  'logoUrl', 'bannerUrl', 'planId', 'hlsUrl', 'dashUrl', 'catchupHlsUrl', 'isCustom',
+  'logoUrl', 'bannerUrl', 'planId', 'hlsUrl', 'dashUrl', 'catchupHlsUrl', 'useAioEpg', 'isCustom',
 ] as const;
 
 // Nguồn: kênh live AIO + lịch AIO, fallback lịch local CMS nhập tay.
@@ -105,11 +106,15 @@ export class TvService {
     }
 
     let timeline: Array<{ time: string; title: string; status: string }> = [];
-    try {
-      const raw = await this.playback.channelSchedule(name, day);
-      if (raw) timeline = mapEpgSchedule(raw);
-    } catch {
-      timeline = [];
+    let fromAio = false;
+    if (aioEpgAllowed(override)) {
+      try {
+        const raw = await this.playback.channelSchedule(name, day);
+        if (raw) timeline = mapEpgSchedule(raw);
+        fromAio = timeline.length > 0;
+      } catch {
+        timeline = [];
+      }
     }
     if (timeline.length === 0) {
       timeline = this.epgLocal.get(name, day).map((it) => ({ time: it.time, title: it.title, status: it.status }));
@@ -126,6 +131,7 @@ export class TvService {
         catchup_hls_url: catchupUrl,
       },
       epg_dates: epgDateWindow(today),
+      epg_source: fromAio ? 'aio' : 'local',
       timeline,
     };
   }
@@ -134,10 +140,14 @@ export class TvService {
   async cmsEpgBySlug(slug: string, date?: string) {
     const day = date || 'default';
     let epgNow: unknown = null;
-    try {
-      epgNow = await this.playback.channelNow(slug);
-    } catch {
-      epgNow = null;
+    const overrides = await this.loadOverrides();
+    const override = overrides.find((o) => channelKeyOf(o.channelKey) === channelKeyOf(slug));
+    if (aioEpgAllowed(override)) {
+      try {
+        epgNow = await this.playback.channelNow(slug);
+      } catch {
+        epgNow = null;
+      }
     }
     return {
       channel: { name: slug.toUpperCase(), slug },
@@ -183,6 +193,7 @@ export class TvService {
         hlsUrl: o?.hlsUrl ?? null,
         dashUrl: o?.dashUrl ?? null,
         catchupHlsUrl: o?.catchupHlsUrl ?? null,
+        useAioEpg: o?.useAioEpg !== false,
       });
     }
     for (const o of overrides) {
@@ -205,6 +216,7 @@ export class TvService {
         hlsUrl: o.hlsUrl ?? null,
         dashUrl: o.dashUrl ?? null,
         catchupHlsUrl: o.catchupHlsUrl ?? null,
+        useAioEpg: o.useAioEpg !== false,
       });
     }
     items.sort((a, b) => a.name.localeCompare(b.name, 'vi'));

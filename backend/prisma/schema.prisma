@@ -179,6 +179,7 @@ model ChannelOverride {
   hlsUrl        String?  @map("hls_url")
   dashUrl       String?  @map("dash_url")
   catchupHlsUrl String?  @map("catchup_hls_url")
+  useAioEpg     Boolean  @default(true) @map("use_aio_epg") // false: chi dung lich EPG CMS nhap tay, khong lay tu AIO
   isCustom      Boolean  @default(false) @map("is_custom")
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")

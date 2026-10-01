@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpException, HttpStatus, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, HttpException, HttpStatus, Optional, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { IsArray, IsIn, IsOptional, IsString, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 import { PermissionsGuard } from '../auth/permissions.guard';
@@ -9,6 +9,8 @@ import { AuditService } from '../audit/audit.service';
 import { PlaybackService } from '../playback/playback.service';
 import { mapEpgSchedule } from '../playback/aio-client';
 import { UploadsService } from '../uploads/uploads.service';
+import { PrismaService } from '../../prisma/prisma.service';
+import { aioEpgAllowed, channelKeyOf } from '../tv/tv.catalog';
 
 class CreateVideoDto {
   @IsString()
@@ -52,6 +54,7 @@ export class ContentController {
     private audit: AuditService,
     private playback: PlaybackService,
     private uploads: UploadsService,
+    @Optional() private prisma?: PrismaService,
   ) {}
 
   private actor(req: any) {
@@ -154,6 +157,20 @@ export class ContentController {
   @Get('channels/:slug/schedule')
   async schedule(@Param('slug') slug: string, @Query('date') date?: string) {
     const day = date || new Date().toISOString().slice(0, 10);
+    // Admin tat "lay EPG tu AIO" cho kenh nay -> chi dung lich CMS nhap tay.
+    let useAio = true;
+    try {
+      const o = await this.prisma?.channelOverride.findUnique({ where: { channelKey: channelKeyOf(slug) } });
+      useAio = aioEpgAllowed(o as any);
+    } catch { /* khong co DB -> giu mac dinh lay AIO */ }
+    if (!useAio) {
+      return {
+        channel: { name: slug.toUpperCase(), slug },
+        date: day,
+        source: 'local',
+        timeline: this.epgService.get(slug, day),
+      };
+    }
     try {
       const raw = await this.playback.channelSchedule(slug, day);
       if (!raw) throw new Error('no aio schedule');
