@@ -1,11 +1,12 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { PrismaService } from '../../prisma/prisma.service';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { Readable } from 'stream';
-import { UploadRecord, UploadStatus, planUpload } from './upload.plan';
+import { UploadRecord, UploadStatus, chunkCount, planUpload } from './upload.plan';
 import { chunkExists, finalPath, rawDir, storageRootDefault, writeChunk } from './local-store';
 import { enqueueTranscode } from './transcode-queue';
 import { PLAYLIST_TTL_SEC, SEGMENT_TTL_SEC, isValidUploadId, signMedia } from './media-sign';
@@ -14,15 +15,22 @@ export function existsLocalUpload(root: string, uploadId: string): boolean {
   return existsSync(rawDir(root, uploadId));
 }
 
-// In-memory records. Len Postgres: bang media_assets (Pending/Processing/Done/Error).
+// Ban ghi upload duoc persist xuong bang media_assets (Prisma) theo kieu
+// write-through: Map trong RAM la cache doc nhanh (API giu nguyen dang sync),
+// moi thay doi trang thai deu upsert xuong Postgres de restart khong mat du lieu.
+// Khong co DATABASE_URL (dev/test) -> chay in-memory nhu cu.
 @Injectable()
-export class UploadsService {
+export class UploadsService implements OnModuleInit {
+  private readonly logger = new Logger(UploadsService.name);
   private records = new Map<string, UploadRecord>();
   private videoHls = new Map<string, { uploadId: string; hlsPath: string }>();
   private s3: S3Client | null = null;
   private bucket: string;
 
-  constructor(private config: ConfigService) {
+  constructor(
+    private config: ConfigService,
+    @Optional() private prisma?: PrismaService,
+  ) {
     const endpoint = this.config.get<string>('S3_ENDPOINT', '');
     const region = this.config.get<string>('S3_REGION', 'ap-southeast-1');
     const accessKey = this.config.get<string>('S3_ACCESS_KEY', '');
@@ -38,9 +46,52 @@ export class UploadsService {
     }
   }
 
+  // Nap lai ban ghi tu Postgres khi khoi dong (restart khong mat thu vien Tap tin).
+  async onModuleInit(): Promise<void> {
+    if (!this.prisma || !process.env.DATABASE_URL) return;
+    try {
+      const rows = await this.prisma.mediaAsset.findMany({ orderBy: { createdAt: 'asc' } });
+      for (const r of rows) {
+        const rec: UploadRecord = {
+          id: r.id,
+          filename: r.filename || r.id,
+          sizeBytes: Number(r.sizeBytes || 0),
+          contentType: r.contentType || 'video/mp4',
+          videoId: r.videoId || undefined,
+          status: (r.status as UploadStatus) || 'pending',
+          chunks: chunkCount(Number(r.sizeBytes || 0)),
+          createdAt: r.createdAt.getTime(),
+        };
+        this.records.set(rec.id, rec);
+        if (rec.status === 'done' && rec.videoId) {
+          this.videoHls.set(rec.videoId, { uploadId: rec.id, hlsPath: `/media/${rec.id}/master.m3u8` });
+        }
+      }
+      if (rows.length) this.logger.log(`Da nap ${rows.length} media_assets tu Postgres.`);
+    } catch (e) {
+      this.logger.warn(`Khong nap duoc media_assets: ${(e as Error).message}`);
+    }
+  }
+
+  // Ghi xuong Postgres (fire-and-forget, loi chi log - khong chan luong upload).
+  private persist(rec: UploadRecord): void {
+    if (!this.prisma || !process.env.DATABASE_URL) return;
+    const data = {
+      filename: rec.filename,
+      sizeBytes: BigInt(Math.trunc(rec.sizeBytes)),
+      contentType: rec.contentType,
+      status: rec.status,
+      videoId: rec.videoId || null,
+    };
+    void this.prisma.mediaAsset
+      .upsert({ where: { id: rec.id }, create: { id: rec.id, ...data }, update: data })
+      .catch((e) => this.logger.warn(`persist media_asset ${rec.id} loi: ${(e as Error).message}`));
+  }
+
   async init(filename: string, sizeBytes: number, contentType: string, videoId?: string) {
     const rec = planUpload(filename, sizeBytes, contentType, videoId);
     this.records.set(rec.id, rec);
+    this.persist(rec);
     // Phase 1: local disk. Co S3_ENDPOINT: ky PUT that (duong dan len S3 sau).
     if (this.s3) {
       const key = `raw/${rec.id}/${filename}`;
@@ -83,6 +134,7 @@ export class UploadsService {
     }
     void this.mergeChunks(root, id, rec.filename);
     rec.status = 'uploaded';
+    this.persist(rec);
     return { ...rec, localPath: finalPath(root, id, rec.filename) };
   }
 
@@ -95,7 +147,7 @@ export class UploadsService {
   // Danh sach upload cho thu vien "Tap tin" cua CMS (kem trang thai transcode).
   listUploads(): (UploadRecord & { transcode: string })[] {
     return [...this.records.values()].map((rec) => {
-      const done = !!rec.videoId && this.videoHls.has(rec.videoId);
+      const done = rec.status === 'done' || (!!rec.videoId && this.videoHls.has(rec.videoId));
       return {
         ...rec,
         transcode: done ? 'done' : rec.status === 'error' ? 'error' : rec.status === 'uploaded' || rec.status === 'processing' ? 'processing' : 'pending',
@@ -139,6 +191,7 @@ export class UploadsService {
   markError(id: string): UploadRecord {
     const rec = this.get(id);
     rec.status = 'error';
+    this.persist(rec);
     return rec;
   }
 
@@ -159,16 +212,32 @@ export class UploadsService {
     return { hlsPath };
   }
 
+  private signedPlayUrl(uploadId: string): string {
+    const exp = Math.floor(Date.now() / 1000) + PLAYLIST_TTL_SEC;
+    const sig = signMedia(uploadId, exp);
+    const base = (this.config.get<string>('VOD_PUBLIC_BASE_URL', '') || '').replace(/\/$/, '');
+    const path = `/api/v1/media/${uploadId}/playlist.m3u8?exp=${exp}&sig=${sig}`;
+    return base ? base + path : path;
+  }
+
   videoPlay(videoId: string): { hls_path: string } {
     const m = this.videoHls.get(videoId);
     if (!m) throw new Error('vod not ready');
     // URL ky HMAC han 15 phut - player khong can Bearer token.
     // VOD_PUBLIC_BASE_URL: domain rieng cho VOD (vd https://vod.vtcrd.top).
-    const exp = Math.floor(Date.now() / 1000) + PLAYLIST_TTL_SEC;
-    const sig = signMedia(m.uploadId, exp);
-    const base = (this.config.get<string>('VOD_PUBLIC_BASE_URL', '') || '').replace(/\/$/, '');
-    const path = `/api/v1/media/${m.uploadId}/playlist.m3u8?exp=${exp}&sig=${sig}`;
-    return { hls_path: base ? base + path : path };
+    return { hls_path: this.signedPlayUrl(m.uploadId) };
+  }
+
+  /** HLS da transcode xong chua (file master.m3u8 ton tai tren storage). */
+  isReady(uploadId: string): boolean {
+    if (!isValidUploadId(uploadId)) return false;
+    return existsSync(join(this.storageRoot(), 'hls', uploadId, 'master.m3u8'));
+  }
+
+  /** Phat theo uploadId (catalog gan videoFileId = uploadId). */
+  playByUploadId(uploadId: string): { hls_path: string } {
+    if (!this.isReady(uploadId)) throw new Error('vod not ready');
+    return { hls_path: this.signedPlayUrl(uploadId) };
   }
 
   /** Doc master.m3u8 va viet lai segment URL thanh URL ky rieng (han 8h). */
@@ -212,6 +281,7 @@ export class UploadsService {
     const rec = this.get(id);
     if (rec.status !== from) throw new Error(`invalid transition ${rec.status} -> ${to}`);
     rec.status = to;
+    this.persist(rec);
     return rec;
   }
 }

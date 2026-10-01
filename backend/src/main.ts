@@ -32,7 +32,8 @@ async function bootstrap() {
     }
     next();
   });
-  const hlsDir = join(__dirname, '..', '..', 'storage', 'hls');
+  const storageRoot = process.env.STORAGE_DIR || join(__dirname, '..', '..', 'storage');
+  const hlsDir = join(storageRoot, 'hls');
   mkdirSync(hlsDir, { recursive: true });
   app.useStaticAssets(hlsDir, { prefix: '/media/' });
   const port = Number(process.env.PORT || 3001);

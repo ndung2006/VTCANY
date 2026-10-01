@@ -13,7 +13,7 @@
 </template>
 
 <script setup lang="ts">
-const emit = defineEmits<{ uploaded: [videoId: string] }>();
+const emit = defineEmits<{ uploaded: [videoId: string]; done: [uploadId: string] }>();
 const props = defineProps<{ videoId?: string }>();
 
 const api = useApi();
@@ -77,6 +77,7 @@ async function poll(id: string) {
       if (s.status === 'done') {
         progress.value = 100;
         doneVideoId.value = s.videoId || '';
+        emit('done', id);
         setPhase('Transcode xong, video đã sẵn sàng.', 'text-emerald-400');
         busy.value = false;
         return;

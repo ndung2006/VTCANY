@@ -98,6 +98,47 @@ export class CatalogController {
     } catch (e) { this.bad(e); }
   }
 
+  // ---- Xuat ban / an noi dung (VOD) ----
+  @RequirePerms('catalog:write')
+  @Post('episodes/:id/publish')
+  async publishEpisode(@Param('id') id: string, @Req() req: any) {
+    try {
+      const ep = await this.catalog.setEpisodePublished(id, true);
+      this.log(req, 'publish', 'episodes', id);
+      return ep;
+    } catch (e) { this.bad(e); }
+  }
+
+  @RequirePerms('catalog:write')
+  @Post('episodes/:id/unpublish')
+  async unpublishEpisode(@Param('id') id: string, @Req() req: any) {
+    try {
+      const ep = await this.catalog.setEpisodePublished(id, false);
+      this.log(req, 'unpublish', 'episodes', id);
+      return ep;
+    } catch (e) { this.bad(e); }
+  }
+
+  @RequirePerms('catalog:write')
+  @Post(':entity/:id/publish')
+  async publish(@Param('entity') entity: string, @Param('id') id: string, @Req() req: any) {
+    try {
+      const item = await this.catalog.setPublished(entity, id, true);
+      this.log(req, 'publish', entity, id);
+      return item;
+    } catch (e) { this.bad(e); }
+  }
+
+  @RequirePerms('catalog:write')
+  @Post(':entity/:id/unpublish')
+  async unpublish(@Param('entity') entity: string, @Param('id') id: string, @Req() req: any) {
+    try {
+      const item = await this.catalog.setPublished(entity, id, false);
+      this.log(req, 'unpublish', entity, id);
+      return item;
+    } catch (e) { this.bad(e); }
+  }
+
   // ---- Settings ----
   @RequirePerms('catalog:read')
   @Get('settings/all')

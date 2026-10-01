@@ -89,8 +89,9 @@
         <Column field="createdAt" header="Ngày tạo">
           <template #body="{ data }">{{ fmtDate(data.createdAt) }}</template>
         </Column>
-        <Column header="Thao tác" style="min-width:9rem">
+        <Column header="Thao tác" style="min-width:11rem">
           <template #body="{ data }">
+            <Button v-if="can('catalog:write')" :label="data.isVisible ? 'Ẩn' : 'Xuất bản'" size="small" text :severity="data.isVisible ? 'warn' : 'success'" @click="toggleEpPublish(data)" />
             <Button v-if="can('catalog:write')" label="Sửa" size="small" text @click="openEpEdit(data)" />
             <Button v-if="can('catalog:write')" label="Xóa" size="small" text severity="danger" @click="removeEpisode(data)" />
           </template>
@@ -104,7 +105,11 @@
           <div><label class="field-label">Thứ tự *</label><InputNumber v-model="epForm.order" class="w-full" :use-grouping="false" /></div>
           <div><label class="field-label">Ngày xuất bản</label><Calendar v-model="epForm.publishedAt" date-format="yy-mm-dd" show-icon class="w-full" /></div>
           <div><label class="field-label">Thời lượng video (h:mm:ss)</label><InputText v-model="epForm.duration" class="w-full" /></div>
-          <div><label class="field-label">Video (file ID từ trang Tập tin)</label><InputText v-model="epForm.videoFileId" class="w-full" /></div>
+          <div><label class="field-label">Video (chọn từ thư viện Tập tin)</label>
+            <Dropdown v-model="epForm.videoFileId" :options="vodFileOptions" option-label="label" option-value="id" editable filter
+              :loading="loadingFiles" placeholder="Chọn file đã transcode xong" class="w-full" />
+            <InputText v-model="epForm.videoFileId" class="w-full mt-1" placeholder="...hoặc nhập ID file thủ công" />
+          </div>
           <div><label class="field-label">Phụ đề EN (URL file)</label><InputText v-model="epForm.subtitleEn" class="w-full" /></div>
           <div><label class="field-label">Phụ đề VI (URL file)</label><InputText v-model="epForm.subtitleVi" class="w-full" /></div>
           <div class="col-span-2"><label class="field-label">Thumbnail (URL)</label><InputText v-model="epForm.thumbnail" class="w-full" /></div>
@@ -153,6 +158,8 @@ const epDistOptions = [
 ];
 
 const plans = ref<any[]>([]);
+const { files: vodFiles, loadingFiles, loadDoneFiles, fileLabel } = useVodFiles();
+const vodFileOptions = computed(() => vodFiles.value.map((f) => ({ id: f.id, label: fileLabel(f) })));
 const dlg = ref(false);
 const editing = ref<any>(null);
 const saving = ref(false);
@@ -238,6 +245,7 @@ function openEpAdd() {
   editingEp.value = null;
   epForm.value = { name: '', description: '', order: (episodes.value.length || 0) + 1, publishedAt: null, duration: '', subtitleEn: '', subtitleVi: '', thumbnail: '', videoFileId: '', isVisible: true, showAds: false, distribution: 'inherit', price: null };
   epFormDlg.value = true;
+  loadDoneFiles();
 }
 function openEpEdit(e: any) {
   editingEp.value = e;
@@ -249,6 +257,17 @@ function openEpEdit(e: any) {
     distribution: e.distribution || 'inherit', price: e.price ?? null,
   };
   epFormDlg.value = true;
+  loadDoneFiles();
+}
+async function toggleEpPublish(ep: any) {
+  const action = ep.isVisible ? 'unpublish' : 'publish';
+  try {
+    await api.post(`/admin/catalog/episodes/${ep.id}/${action}`);
+    toast.add({ severity: 'success', summary: ep.isVisible ? 'Đã ẩn tập phim' : 'Đã xuất bản tập phim', life: 2500 });
+    loadEpisodes();
+  } catch (e: any) {
+    toast.add({ severity: 'error', summary: 'Lỗi', detail: e?.response?.data?.error?.message || e?.message, life: 3000 });
+  }
 }
 async function saveEpisode() {
   epSaving.value = true;

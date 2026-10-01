@@ -143,15 +143,22 @@ model Short {
 // ---------------------------------------------------------------------------
 
 model MediaAsset {
-  id        String   @id @default(uuid())
-  fileUrl   String?  @map("file_url")
-  objectKey String?  @map("object_key")
-  fileType  String?  @map("file_type") // video|image|subtitle|audio
-  status    String   @default("pending") // pending|processing|done|error
-  error     String?
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id          String   @id @default(uuid())
+  fileUrl     String?  @map("file_url")
+  objectKey   String?  @map("object_key")
+  fileType    String?  @map("file_type") // video|image|subtitle|audio
+  status      String   @default("pending") // pending|uploaded|processing|done|error
+  error       String?
+  // Upload VOD tu CMS (thu vien Tap tin): ten file goc, dung luong, loai MIME,
+  // va noi dung (video) duoc gan neu co. File HLS: storage/hls/<id>/master.m3u8.
+  filename    String?
+  sizeBytes   BigInt?  @map("size_bytes")
+  contentType String?  @map("content_type")
+  videoId     String?  @map("video_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
 
+  @@index([status, createdAt])
   @@map("media_assets")
 }
 

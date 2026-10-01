@@ -3,9 +3,10 @@ import { UploadsController } from './uploads.controller';
 import { MediaController } from './media.controller';
 import { UploadsService } from './uploads.service';
 import { AuthModule } from '../auth/auth.module';
+import { PrismaModule } from '../../prisma/prisma.module';
 
 @Module({
-  imports: [AuthModule],
+  imports: [AuthModule, PrismaModule],
   controllers: [UploadsController, MediaController],
   providers: [UploadsService],
   exports: [UploadsService],

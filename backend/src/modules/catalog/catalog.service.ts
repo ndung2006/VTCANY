@@ -278,6 +278,15 @@ export class CatalogService implements OnModuleInit {
     await this.prisma.catalogEpisode.delete({ where: { id } });
   }
 
+  // ---- Xuat ban / an noi dung VOD (cong tac isVisible) ----
+  async setPublished(name: string, id: string, published: boolean): Promise<any> {
+    return this.update(name, id, { isVisible: published });
+  }
+
+  async setEpisodePublished(id: string, published: boolean): Promise<Episode> {
+    return this.updateEpisode(id, { isVisible: published });
+  }
+
   async episodeCount(): Promise<number> {
     return this.prisma.catalogEpisode.count();
   }
