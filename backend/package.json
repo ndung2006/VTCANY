@@ -7,6 +7,8 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/main.js",
     "seed": "ts-node src/seed/seed.ts",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate deploy",
     "test": "npm run build && node --test aio-client.test.mjs telemetry.test.mjs hardening.test.mjs uploads.test.mjs standardize.test.mjs layout.test.mjs movies.test.mjs tv-search.test.mjs"
   },
   "dependencies": {
@@ -17,6 +19,7 @@
     "@nestjs/core": "^10.4.0",
     "@nestjs/jwt": "^10.2.0",
     "@nestjs/platform-express": "^10.4.0",
+    "@prisma/client": "^5.22.0",
     "bcryptjs": "^2.4.3",
     "bullmq": "^6.3.10",
     "class-transformer": "^0.5.1",
@@ -27,6 +30,7 @@
   "devDependencies": {
     "@types/express": "^4.17.21",
     "@types/node": "^20.14.0",
+    "prisma": "^5.22.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.5.0"
   }

@@ -62,17 +62,17 @@ export class CatalogController {
   // ---- Episodes (nam trong movie) ----
   @RequirePerms('catalog:read')
   @Get('movies/:id/episodes')
-  listEpisodes(@Param('id') id: string, @Query('page') page?: string, @Query('limit') limit?: string) {
+  async listEpisodes(@Param('id') id: string, @Query('page') page?: string, @Query('limit') limit?: string) {
     try {
-      return this.catalog.listEpisodes(id, Number(page) || 1, Number(limit) || 20);
+      return await this.catalog.listEpisodes(id, Number(page) || 1, Number(limit) || 20);
     } catch (e) { this.bad(e); }
   }
 
   @RequirePerms('catalog:write')
   @Post('movies/:id/episodes')
-  createEpisode(@Param('id') id: string, @Body() body: any, @Req() req: any) {
+  async createEpisode(@Param('id') id: string, @Body() body: any, @Req() req: any) {
     try {
-      const ep = this.catalog.createEpisode(id, body || {});
+      const ep = await this.catalog.createEpisode(id, body || {});
       this.log(req, 'create', 'episodes', ep.id);
       return ep;
     } catch (e) { this.bad(e); }
@@ -80,9 +80,9 @@ export class CatalogController {
 
   @RequirePerms('catalog:write')
   @Patch('episodes/:id')
-  updateEpisode(@Param('id') id: string, @Body() body: any, @Req() req: any) {
+  async updateEpisode(@Param('id') id: string, @Body() body: any, @Req() req: any) {
     try {
-      const ep = this.catalog.updateEpisode(id, body || {});
+      const ep = await this.catalog.updateEpisode(id, body || {});
       this.log(req, 'update', 'episodes', id);
       return ep;
     } catch (e) { this.bad(e); }
@@ -90,9 +90,9 @@ export class CatalogController {
 
   @RequirePerms('catalog:write')
   @Delete('episodes/:id')
-  deleteEpisode(@Param('id') id: string, @Req() req: any) {
+  async deleteEpisode(@Param('id') id: string, @Req() req: any) {
     try {
-      this.catalog.deleteEpisode(id);
+      await this.catalog.deleteEpisode(id);
       this.log(req, 'delete', 'episodes', id);
       return { ok: true };
     } catch (e) { this.bad(e); }
@@ -101,14 +101,14 @@ export class CatalogController {
   // ---- Settings ----
   @RequirePerms('catalog:read')
   @Get('settings/all')
-  getSettings() {
+  async getSettings() {
     return this.catalog.getSettings();
   }
 
   @RequirePerms('catalog:write')
   @Put('settings/all')
-  putSettings(@Body() body: any, @Req() req: any) {
-    const s = this.catalog.putSettings(body || {});
+  async putSettings(@Body() body: any, @Req() req: any) {
+    const s = await this.catalog.putSettings(body || {});
     this.log(req, 'update', 'settings');
     return s;
   }
@@ -126,10 +126,10 @@ export class CatalogController {
   // ---- Analytics ----
   @RequirePerms('catalog:read')
   @Get('analytics/summary')
-  summary() {
+  async summary() {
     // Dem user/channel that su lieu hien co; bieu do dang ky dung mock on dinh.
     return {
-      ...this.catalog.summary({ users: END_USERS.length, channels: 0 }),
+      ...(await this.catalog.summary({ users: END_USERS.length, channels: 0 })),
       registrations7d: [3, 5, 2, 6, 4, 7, 5],
     };
   }
@@ -173,17 +173,17 @@ export class CatalogController {
   // ---- Generic CRUD ----
   @RequirePerms('catalog:read')
   @Get(':entity')
-  list(@Param('entity') entity: string, @Query('page') page?: string, @Query('limit') limit?: string, @Query('q') q?: string) {
+  async list(@Param('entity') entity: string, @Query('page') page?: string, @Query('limit') limit?: string, @Query('q') q?: string) {
     try {
-      return this.catalog.store(entity).list({ page: Number(page) || 1, limit: Number(limit) || 20, q });
+      return await this.catalog.list(entity, { page: Number(page) || 1, limit: Number(limit) || 20, q });
     } catch (e) { this.bad(e); }
   }
 
   @RequirePerms('catalog:write')
   @Post(':entity')
-  create(@Param('entity') entity: string, @Body() body: any, @Req() req: any) {
+  async create(@Param('entity') entity: string, @Body() body: any, @Req() req: any) {
     try {
-      const item = this.catalog.store(entity).create(body || {});
+      const item = await this.catalog.create(entity, body || {});
       this.log(req, 'create', entity, item.id);
       return item;
     } catch (e) { this.bad(e); }
@@ -191,17 +191,17 @@ export class CatalogController {
 
   @RequirePerms('catalog:read')
   @Get(':entity/:id')
-  getOne(@Param('entity') entity: string, @Param('id') id: string) {
+  async getOne(@Param('entity') entity: string, @Param('id') id: string) {
     try {
-      return this.catalog.store(entity).get(id);
+      return await this.catalog.get(entity, id);
     } catch (e) { this.bad(e); }
   }
 
   @RequirePerms('catalog:write')
   @Patch(':entity/:id')
-  update(@Param('entity') entity: string, @Param('id') id: string, @Body() body: any, @Req() req: any) {
+  async update(@Param('entity') entity: string, @Param('id') id: string, @Body() body: any, @Req() req: any) {
     try {
-      const item = this.catalog.store(entity).update(id, body || {});
+      const item = await this.catalog.update(entity, id, body || {});
       this.log(req, 'update', entity, id);
       return item;
     } catch (e) { this.bad(e); }
@@ -209,9 +209,9 @@ export class CatalogController {
 
   @RequirePerms('catalog:write')
   @Delete(':entity/:id')
-  remove(@Param('entity') entity: string, @Param('id') id: string, @Req() req: any) {
+  async remove(@Param('entity') entity: string, @Param('id') id: string, @Req() req: any) {
     try {
-      this.catalog.store(entity).remove(id);
+      await this.catalog.remove(entity, id);
       this.log(req, 'delete', entity, id);
       return { ok: true };
     } catch (e) { this.bad(e); }

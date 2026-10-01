@@ -327,3 +327,39 @@ model WatchHistory {
   @@unique([userId, contentId])
   @@map("watch_history")
 }
+
+// ---------------------------------------------------------------------------
+// CMS Catalog (admin CRUD theo mẫu VTCPlay CMS) — persist thay in-memory Map.
+// Item lưu full payload dạng Json để giữ nguyên API shape linh hoạt của CMS;
+// các cột id/entity/movieId/createdAt phục vụ truy vấn, sắp xếp, phân trang.
+// ---------------------------------------------------------------------------
+
+model CatalogItem {
+  id        String   @id
+  entity    String // movies|videos|shorts|genres|actors|playlists|articles|events|plans|notifications|keywords|banned|livestreams|banners|rails
+  data      Json
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([entity, createdAt])
+  @@map("catalog_items")
+}
+
+model CatalogEpisode {
+  id        String   @id
+  movieId   String   @map("movie_id")
+  data      Json
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([movieId, createdAt])
+  @@map("catalog_episodes")
+}
+
+model CatalogSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("catalog_settings")
+}
