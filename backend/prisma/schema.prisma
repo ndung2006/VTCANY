@@ -162,6 +162,30 @@ model MediaAsset {
   @@map("media_assets")
 }
 
+// Kenh truyen hinh lay tu VTC AIO (khong co bang kenh rieng). Bang nay chi luu
+// lop quan tri de BE/CMS quyet dinh kenh nao duoc hien thi tren web/app:
+// an/hien, nhom, thu tu, ten/logo/banner hien thi, goi cuoc, nguon phat ghi de.
+// isCustom=true: kenh/su kien admin tu them tay (HLS rieng), khong co tren AIO.
+model ChannelOverride {
+  channelKey    String   @id @map("channel_key") // ten kenh AIO viet hoa (vd VTV1) hoac key kenh tu them
+  isVisible     Boolean  @default(true) @map("is_visible")
+  sortOrder     Int?     @map("sort_order")
+  groupName     String?  @map("group_name")
+  displayName   String?  @map("display_name")
+  description   String?
+  logoUrl       String?  @map("logo_url")
+  bannerUrl     String?  @map("banner_url")
+  planId        String?  @map("plan_id")
+  hlsUrl        String?  @map("hls_url")
+  dashUrl       String?  @map("dash_url")
+  catchupHlsUrl String?  @map("catchup_hls_url")
+  isCustom      Boolean  @default(false) @map("is_custom")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@map("channel_overrides")
+}
+
 model VideoSubtitle {
   id        String   @id @default(uuid())
   videoId   String   @map("video_id")

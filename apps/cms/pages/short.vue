@@ -127,7 +127,7 @@ const categories = ref<any[]>([]);
 const loadingCats = ref(false);
 const plans = ref<any[]>([]);
 const loadingPlans = ref(false);
-const ageOptions = ['Mọi độ tuổi', '13+', '16+', '18+'];
+const ageOptions = ['P - Phù hợp mọi độ tuổi', 'T13 - 13 tuổi trở lên', 'T16 - 16 tuổi trở lên', 'T18 - 18 tuổi trở lên'];
 const platformOptions = ['Website', 'Mobile App', 'TV App'];
 
 function categoryName(id: any): string { return categories.value.find((c) => c.id === id)?.name || '—'; }
