@@ -1,6 +1,7 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit, Optional } from '@nestjs/common';
 import { createHash } from 'crypto';
 import { PrismaService } from '../../prisma/prisma.service';
+import { UploadsService } from '../uploads/uploads.service';
 
 // Catalog CMS theo mau VTCPlay — persist Postgres qua Prisma (bang catalog_items/
 // catalog_episodes/catalog_settings, payload Json giu nguyen API shape linh hoat).
@@ -211,7 +212,10 @@ export function toPublicItem(item: any): any {
 export class CatalogService implements OnModuleInit {
   private readonly logger = new Logger(CatalogService.name);
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    @Optional() private uploads?: UploadsService,
+  ) {}
 
   async onModuleInit(): Promise<void> {
     // Seed giong VTCPlay: 2 goi cuoc mac dinh — chi khi bang plans con trong.
@@ -276,9 +280,18 @@ export class CatalogService implements OnModuleInit {
   }
 
   // Web cong khai (/catalog/shorts|videos): chi noi dung dang xuat ban.
+  // Chua co thumbnail rieng -> dung poster worker tu cat tu video (neu co).
+  private withPosterFallback(item: any): any {
+    const out = toPublicItem(item);
+    if (out && !out.thumbnail && item?.videoFileId) {
+      out.thumbnail = this.uploads?.posterUrlFor(item.videoFileId) || '';
+    }
+    return out;
+  }
+
   async listPublic(name: string, opts: { page?: number; limit?: number } = {}): Promise<any> {
     const res = await this.list(name, { page: 1, limit: 100 });
-    const visible = (res.data || []).filter((it: any) => it.isVisible !== false).map(toPublicItem);
+    const visible = (res.data || []).filter((it: any) => it.isVisible !== false).map((it: any) => this.withPosterFallback(it));
     return paginate(visible, opts.page, opts.limit);
   }
 
@@ -288,7 +301,7 @@ export class CatalogService implements OnModuleInit {
       (it: any) => it.isVisible !== false && catalogPublicId(it.id) === publicId,
     );
     if (!found) throw new Error('not found');
-    return toPublicItem(found);
+    return this.withPosterFallback(found);
   }
 
   async count(name: string): Promise<number> {

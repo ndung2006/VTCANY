@@ -157,12 +157,13 @@ export class UploadsService implements OnModuleInit {
   }
 
   // Danh sach upload cho thu vien "Tap tin" cua CMS (kem trang thai transcode).
-  listUploads(): (UploadRecord & { transcode: string })[] {
+  listUploads(): (UploadRecord & { transcode: string; posterUrl: string })[] {
     return [...this.records.values()].map((rec) => {
       const done = rec.status === 'done' || (!!rec.videoId && this.videoHls.has(rec.videoId));
       return {
         ...rec,
         transcode: done ? 'done' : rec.status === 'error' ? 'error' : rec.status === 'uploaded' || rec.status === 'processing' ? 'processing' : 'pending',
+        posterUrl: this.posterUrlFor(rec.id),
       };
     });
   }
@@ -178,6 +179,13 @@ export class UploadsService implements OnModuleInit {
 
   imageUrl(rec: ImageRecord): string {
     return (this.publicBase() || '') + rec.fileUrl;
+  }
+
+  /** Poster tu dong do worker cat khi transcode: images/thumb-<uploadId>.jpg. */
+  posterUrlFor(uploadId: string): string {
+    if (!uploadId || !isValidUploadId(uploadId)) return '';
+    if (!existsSync(join(this.imagesDir(), `thumb-${uploadId}.jpg`))) return '';
+    return `${this.publicBase()}/images/thumb-${uploadId}.jpg`;
   }
 
   listImages(): (ImageRecord & { url: string })[] {
@@ -293,12 +301,12 @@ export class UploadsService implements OnModuleInit {
     return base ? base + path : path;
   }
 
-  videoPlay(videoId: string): { hls_path: string } {
+  videoPlay(videoId: string): { hls_path: string; poster: string } {
     const m = this.videoHls.get(videoId);
     if (!m) throw new Error('vod not ready');
     // URL ky HMAC han 15 phut - player khong can Bearer token.
     // VOD_PUBLIC_BASE_URL: domain rieng cho VOD (vd https://vod.vtcrd.top).
-    return { hls_path: this.signedPlayUrl(m.uploadId) };
+    return { hls_path: this.signedPlayUrl(m.uploadId), poster: this.posterUrlFor(m.uploadId) };
   }
 
   /** HLS da transcode xong chua (file master.m3u8 ton tai tren storage). */
@@ -308,9 +316,9 @@ export class UploadsService implements OnModuleInit {
   }
 
   /** Phat theo uploadId (catalog gan videoFileId = uploadId). */
-  playByUploadId(uploadId: string): { hls_path: string } {
+  playByUploadId(uploadId: string): { hls_path: string; poster: string } {
     if (!this.isReady(uploadId)) throw new Error('vod not ready');
-    return { hls_path: this.signedPlayUrl(uploadId) };
+    return { hls_path: this.signedPlayUrl(uploadId), poster: this.posterUrlFor(uploadId) };
   }
 
   /** Doc master.m3u8 va viet lai segment URL thanh URL ky rieng (han 8h). */
@@ -320,6 +328,10 @@ export class UploadsService implements OnModuleInit {
     if (!existsSync(playlistPath)) throw new Error('playlist not found');
     const segExp = Math.floor(Date.now() / 1000) + SEGMENT_TTL_SEC;
     const segSig = signMedia(uploadId, segExp);
+    // Uu tien base cong khai (https) thay vi proto tu request: sau proxy,
+    // req.protocol thuong la http -> segment http bi trinh duyet chan
+    // mixed-content tren trang https (player dung 0:00).
+    const base = this.publicBase() || baseUrl;
     return readFileSync(playlistPath, 'utf8')
       .split('\n')
       .map((line) => {
@@ -327,7 +339,7 @@ export class UploadsService implements OnModuleInit {
         if (!t || t.startsWith('#')) return line;
         const seg = t.split('/').pop() || '';
         if (!/^[A-Za-z0-9_.-]+$/.test(seg)) return line; // giu nguyen dong la
-        return `${baseUrl}/media/${uploadId}/${seg}?exp=${segExp}&sig=${segSig}`;
+        return `${base}/media/${uploadId}/${seg}?exp=${segExp}&sig=${segSig}`;
       })
       .join('\n');
   }

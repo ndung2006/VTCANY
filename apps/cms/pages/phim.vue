@@ -113,8 +113,13 @@
           <div v-if="editingEp?.id" class="col-span-2">
             <label class="field-label">Xem trước video</label>
             <div v-if="epPreviewUrl" class="relative aspect-video overflow-hidden rounded-lg bg-black">
-              <HlsPreview :src="epPreviewUrl" class="absolute inset-0" />
+              <HlsPreview ref="epPreviewRef" :src="epPreviewUrl" class="absolute inset-0" />
               <span class="absolute right-2 top-2 z-10 flex gap-1.5">
+                <button type="button" title="Chụp thumbnail từ khung hình hiện tại"
+                  class="flex h-9 w-9 items-center justify-center rounded-full border border-white/70 bg-black/30 text-white backdrop-blur transition hover:bg-black/50 disabled:opacity-50"
+                  :disabled="epCapturing" @click="captureEpThumb">
+                  <i :class="epCapturing ? 'pi pi-spin pi-spinner text-sm' : 'pi pi-camera text-sm'"></i>
+                </button>
                 <button type="button" title="Bỏ video"
                   class="flex h-9 w-9 items-center justify-center rounded-full border border-white/70 bg-black/30 text-red-400 backdrop-blur transition hover:bg-black/50"
                   @click="epForm.videoFileId = ''; epPreviewUrl = ''">
@@ -175,7 +180,7 @@ const epDistOptions = [
 
 const plans = ref<any[]>([]);
 const { files: vodFiles, loadingFiles, loadDoneFiles, fileLabel } = useVodFiles();
-const vodFileOptions = computed(() => vodFiles.value.map((f) => ({ id: f.id, label: fileLabel(f) })));
+const vodFileOptions = computed(() => vodFiles.value.map((f) => ({ id: f.id, label: fileLabel(f), posterUrl: f.posterUrl || '' })));
 const dlg = ref(false);
 const editing = ref<any>(null);
 const saving = ref(false);
@@ -292,8 +297,39 @@ async function loadEpPreview() {
     epPreviewErr.value = e?.data?.error?.message || 'Video chưa sẵn sàng (chưa gắn file hoặc transcode chưa xong).';
   } finally { epPreviewBusy.value = false; }
 }
-watch(() => epForm.value.videoFileId, () => { epPreviewUrl.value = ''; epPreviewErr.value = ''; });
+watch(() => epForm.value.videoFileId, () => { epPreviewUrl.value = ''; epPreviewErr.value = ''; autoEpThumbFromFile(); });
 watch(epFormDlg, (open) => { if (!open) { epPreviewUrl.value = ''; epPreviewErr.value = ''; } });
+
+// Thumbnail tu dong cho tap: dung poster worker cat san neu chua co anh rieng.
+function autoEpThumbFromFile() {
+  if (epForm.value.thumbnail) return;
+  const f = vodFileOptions.value.find((x) => x.id === epForm.value.videoFileId);
+  if (f?.posterUrl) epForm.value.thumbnail = f.posterUrl;
+}
+watch(vodFileOptions, autoEpThumbFromFile);
+
+// Chup khung hinh dang phat lam thumbnail cho tap phim.
+const epPreviewRef = ref<any>(null);
+const epCapturing = ref(false);
+async function captureEpThumb() {
+  if (!epPreviewRef.value?.captureFrame) return;
+  epCapturing.value = true;
+  try {
+    const blob = await epPreviewRef.value.captureFrame();
+    if (!blob) {
+      toast.add({ severity: 'warn', summary: 'Chưa chụp được', detail: 'Hãy để video phát một lúc rồi thử lại.', life: 3000 });
+      return;
+    }
+    const file = new File([blob], `thumb-ep-${Date.now()}.jpg`, { type: 'image/jpeg' });
+    const res = await api.put<any>('/uploads/image', file, { 'Content-Type': 'image/jpeg', 'x-file-name': encodeURIComponent(file.name) });
+    if (res?.url) {
+      epForm.value.thumbnail = res.url;
+      toast.add({ severity: 'success', summary: 'Đã cắt thumbnail từ video', life: 2500 });
+    }
+  } catch (e: any) {
+    toast.add({ severity: 'error', summary: 'Chụp thumbnail lỗi', detail: e?.data?.error || e?.message || 'Thử lại sau.', life: 3000 });
+  } finally { epCapturing.value = false; }
+}
 
 async function toggleEpPublish(ep: any) {
   const action = ep.isVisible ? 'unpublish' : 'publish';

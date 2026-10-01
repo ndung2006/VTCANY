@@ -58,3 +58,24 @@ test('VodService: chua xuat ban -> not published; xuat ban + HLS san sang -> pha
   assert.match(ok.hls_path, /vod\.example\.test/);
   await assert.rejects(() => vod.resolvePlay('episode', 'ep-x'), /not found|not published/);
 });
+
+test('signedPlaylist: segment dung base https cong khai, khong ro http tu request (mixed-content)', () => {
+  const root = mkdtempSync(join(tmpdir(), 'vod-'));
+  const svc = new UploadsService(fakeCfg(root));
+  writeHls(root, 'upl-2');
+  const body = svc.signedPlaylist('upl-2', 'http://internal:3001');
+  assert.match(body, /https:\/\/vod\.example\.test\/media\/upl-2\/seg-0\.ts\?exp=\d+&sig=[0-9a-f]+/);
+  assert.doesNotMatch(body, /http:\/\/internal/);
+});
+
+test('posterUrlFor: chua co file -> rong; worker da cat poster -> URL cong khai; id la -> rong', () => {
+  const root = mkdtempSync(join(tmpdir(), 'vod-'));
+  const svc = new UploadsService(fakeCfg(root));
+  assert.equal(svc.posterUrlFor('upl-3'), '');
+  assert.equal(svc.posterUrlFor('../etc/passwd'), '');
+  mkdirSync(join(root, 'images'), { recursive: true });
+  writeFileSync(join(root, 'images', 'thumb-upl-3.jpg'), 'jpeg-bytes');
+  assert.equal(svc.posterUrlFor('upl-3'), 'https://vod.example.test/images/thumb-upl-3.jpg');
+  const play = (() => { writeHls(root, 'upl-3'); return svc.playByUploadId('upl-3'); })();
+  assert.equal(play.poster, 'https://vod.example.test/images/thumb-upl-3.jpg');
+});

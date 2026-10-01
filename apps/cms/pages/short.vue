@@ -84,13 +84,18 @@
         <div>
           <label class="field-label">Video</label>
           <div class="relative aspect-[9/16] overflow-hidden rounded-lg bg-neutral-900">
-            <HlsPreview v-if="previewUrl" :src="previewUrl" :poster="form.thumbnail" class="absolute inset-0" />
+            <HlsPreview v-if="previewUrl" ref="previewRef" :src="previewUrl" :poster="form.thumbnail" class="absolute inset-0" />
             <div v-else class="absolute inset-0 flex flex-col items-center justify-center gap-2 p-3 text-center">
               <i class="pi pi-video text-3xl text-neutral-400"></i>
               <span class="text-xs text-neutral-400 break-all">{{ selectedFileLabel || 'Chưa chọn video' }}</span>
               <span v-if="form.videoFileId" class="text-[11px] text-neutral-500 break-all">{{ form.videoFileId }}</span>
             </div>
             <span v-if="previewUrl" class="absolute right-2 top-2 z-10 flex gap-1.5">
+              <button type="button" title="Chụp thumbnail từ khung hình hiện tại"
+                class="flex h-9 w-9 items-center justify-center rounded-full border border-white/70 bg-black/30 text-white backdrop-blur transition hover:bg-black/50 disabled:opacity-50"
+                :disabled="capturing" @click="captureThumb">
+                <i :class="capturing ? 'pi pi-spin pi-spinner text-sm' : 'pi pi-camera text-sm'"></i>
+              </button>
               <button type="button" title="Chọn video khác"
                 class="flex h-9 w-9 items-center justify-center rounded-full border border-white/70 bg-black/30 text-green-400 backdrop-blur transition hover:bg-black/50"
                 @click="previewUrl = ''">
@@ -138,7 +143,7 @@ const api = useApi();
 const toast = useToast();
 const { items, meta, loading, load, onPage, saveItem, confirmDelete } = useCatalog('shorts');
 const { files: vodFiles, loadingFiles, loadDoneFiles, fileLabel } = useVodFiles();
-const files = computed(() => vodFiles.value.map((f) => ({ id: f.id, label: fileLabel(f) })));
+const files = computed(() => vodFiles.value.map((f) => ({ id: f.id, label: fileLabel(f), posterUrl: f.posterUrl || '' })));
 const selectedFileLabel = computed(() => files.value.find((f) => f.id === form.value.videoFileId)?.label || '');
 
 const categories = ref<any[]>([]);
@@ -209,7 +214,40 @@ function clearVideo() {
   form.value.videoFileId = '';
   previewUrl.value = ''; previewErr.value = '';
 }
-watch(() => form.value.videoFileId, () => { previewUrl.value = ''; previewErr.value = ''; });
+
+// Thumbnail tu dong: file video nao da co poster (worker cat khi transcode)
+// thi tu dien lam thumbnail neu form chua co anh rieng.
+function autoThumbFromFile() {
+  if (form.value.thumbnail) return;
+  const f = files.value.find((x) => x.id === form.value.videoFileId);
+  if (f?.posterUrl) form.value.thumbnail = f.posterUrl;
+}
+
+// Chup khung hinh dang phat lam thumbnail: tai anh len thu vien roi gan form.
+const previewRef = ref<any>(null);
+const capturing = ref(false);
+async function captureThumb() {
+  if (!previewRef.value?.captureFrame) return;
+  capturing.value = true;
+  try {
+    const blob = await previewRef.value.captureFrame();
+    if (!blob) {
+      toast.add({ severity: 'warn', summary: 'Chưa chụp được', detail: 'Hãy để video phát một lúc rồi thử lại.', life: 3000 });
+      return;
+    }
+    const file = new File([blob], `thumb-${Date.now()}.jpg`, { type: 'image/jpeg' });
+    const res = await api.put<any>('/uploads/image', file, { 'Content-Type': 'image/jpeg', 'x-file-name': encodeURIComponent(file.name) });
+    if (res?.url) {
+      form.value.thumbnail = res.url;
+      toast.add({ severity: 'success', summary: 'Đã cắt thumbnail từ video', life: 2500 });
+    }
+  } catch (e: any) {
+    toast.add({ severity: 'error', summary: 'Chụp thumbnail lỗi', detail: e?.data?.error || e?.message || 'Thử lại sau.', life: 3000 });
+  } finally { capturing.value = false; }
+}
+
+watch(() => form.value.videoFileId, () => { previewUrl.value = ''; previewErr.value = ''; autoThumbFromFile(); });
+watch(files, autoThumbFromFile);
 watch(dlg, (open) => { if (!open) { previewUrl.value = ''; previewErr.value = ''; } });
 async function togglePublish(row: any) {
   const action = row.isVisible ? 'unpublish' : 'publish';
