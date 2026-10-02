@@ -50,15 +50,15 @@ export class AdminController {
   // ---- Danh mục ----
   @RequirePerms('category:read')
   @Get('categories')
-  listCategories() {
-    return { data: this.categories.list() };
+  async listCategories() {
+    return { data: await this.categories.list() };
   }
 
   @RequirePerms('category:create')
   @Post('categories')
-  createCategory(@Body() dto: CategoryDto, @Req() req: any) {
+  async createCategory(@Body() dto: CategoryDto, @Req() req: any) {
     try {
-      const c = this.categories.create(dto);
+      const c = await this.categories.create(dto);
       this.audit.record({ at: Date.now(), ...this.actor(req), action: 'category.create', resource: c.id });
       return c;
     } catch (e) {
@@ -68,9 +68,9 @@ export class AdminController {
 
   @RequirePerms('category:update')
   @Patch('categories/:id')
-  updateCategory(@Param('id') id: string, @Body() dto: CategoryDto, @Req() req: any) {
+  async updateCategory(@Param('id') id: string, @Body() dto: CategoryDto, @Req() req: any) {
     try {
-      const c = this.categories.update(id, dto);
+      const c = await this.categories.update(id, dto);
       this.audit.record({ at: Date.now(), ...this.actor(req), action: 'category.update', resource: id });
       return c;
     } catch (e) {
@@ -80,9 +80,9 @@ export class AdminController {
 
   @RequirePerms('category:delete')
   @Delete('categories/:id')
-  deleteCategory(@Param('id') id: string, @Req() req: any) {
+  async deleteCategory(@Param('id') id: string, @Req() req: any) {
     try {
-      const r = this.categories.remove(id);
+      const r = await this.categories.remove(id);
       this.audit.record({ at: Date.now(), ...this.actor(req), action: 'category.delete', resource: id });
       return r;
     } catch (e) {

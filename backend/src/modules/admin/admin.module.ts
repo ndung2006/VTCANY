@@ -10,5 +10,6 @@ import { LayoutModule } from '../layout/layout.module';
   imports: [AuditModule, AuthModule, LayoutModule],
   controllers: [AdminController, LayoutAdminController],
   providers: [CategoryService],
+  exports: [CategoryService],
 })
 export class AdminModule {}

@@ -330,10 +330,16 @@ export class CatalogService implements OnModuleInit {
     return out;
   }
 
-  async listPublic(name: string, opts: { page?: number; limit?: number } = {}): Promise<any> {
+  async listPublic(name: string, opts: { page?: number; limit?: number; categoryId?: string } = {}): Promise<any> {
     const res = await this.list(name, { page: 1, limit: 100 });
-    const visible = (res.data || []).filter((it: any) => it.isVisible !== false).map((it: any) => this.withPosterFallback(it));
-    return paginate(visible, opts.page, opts.limit);
+    let visible = (res.data || []).filter((it: any) => it.isVisible !== false);
+    if (opts.categoryId) {
+      visible = visible.filter((it: any) =>
+        Array.isArray(it.categoryIds) ? it.categoryIds.includes(opts.categoryId) : it.categoryId === opts.categoryId,
+      );
+    }
+    const mapped = visible.map((it: any) => this.withPosterFallback(it));
+    return paginate(mapped, opts.page, opts.limit);
   }
 
   async getPublic(name: string, publicId: string): Promise<any> {

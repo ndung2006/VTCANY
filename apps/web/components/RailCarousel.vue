@@ -14,7 +14,7 @@
         <NuxtLink :to="cardUrl(data)" class="mr-3 block">
           <div
             class="w-full overflow-hidden rounded-lg bg-neutral-800"
-            :class="block.card_aspect === '3:4' ? 'aspect-[3/4]' : 'aspect-[3/2]'"
+            :class="aspectClass"
           >
             <img
               :src="data.thumbnail"
@@ -64,4 +64,11 @@ const responsive = [
 function cardUrl(item: RailItem): string {
   return contentUrl(item);
 }
+
+const aspectClass = computed(() => {
+  const a = props.block.card_aspect;
+  if (a === '3:4' || a === '3/4') return 'aspect-[3/4]';
+  if (a === '9:16' || a === '9/16') return 'aspect-[9/16]';
+  return 'aspect-[3/2]';
+});
 </script>
