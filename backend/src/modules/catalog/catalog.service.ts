@@ -34,6 +34,7 @@ export interface Movie {
 export interface Episode {
   id: string;
   movieId: string;
+  seasonId?: string; // tap thuoc mua (phim bo); khong co = tap truc tiep cua phim (phim le)
   title: string;
   description?: string;
   order?: number;
@@ -48,6 +49,27 @@ export interface Episode {
   distribution?: 'inherit' | 'free' | 'paid';
   price?: number;
   createdAt: string;
+}
+
+// Mua / phan cua phim bo (theo mau VTCPlay CMS).
+export interface Season {
+  id: string;
+  movieId: string;
+  title: string;
+  description?: string;
+  order?: number;
+  year?: number;
+  publishDate?: string;
+  poster?: string;
+  thumbnail?: string;
+  isVisible?: boolean;
+  createdAt: string;
+}
+
+// Trailer: cung cau truc nhu Episode; gan o cap phim (phim le) hoac cap mua (phim bo).
+export interface Trailer extends Omit<Episode, 'movieId' | 'seasonId'> {
+  movieId?: string;
+  seasonId?: string;
 }
 
 export interface FlatVideo {
@@ -217,6 +239,13 @@ export class CatalogService implements OnModuleInit {
     @Optional() private uploads?: UploadsService,
   ) {}
 
+  // NOTE: @prisma/client trong VM chua duoc regenerate cho CatalogSeason/
+  // CatalogTrailer/season_id (can mang de tai Prisma engine; Docker build
+  // tren production tu chay `prisma generate` day du). Dung cast tam co
+  // chu thich; test dung fake Prisma, runtime that co du model.
+  private get seasonDb(): any { return (this.prisma as any).catalogSeason; }
+  private get trailerDb(): any { return (this.prisma as any).catalogTrailer; }
+
   async onModuleInit(): Promise<void> {
     // Seed giong VTCPlay: 2 goi cuoc mac dinh — chi khi bang plans con trong.
     try {
@@ -263,6 +292,18 @@ export class CatalogService implements OnModuleInit {
   async remove(name: string, id: string): Promise<void> {
     await this.get(name, id); // 404 neu khong ton tai
     await this.prisma.catalogItem.delete({ where: { id } });
+    if (name === 'movies') {
+      // Xoa phim thi don sach mua / tap / trailer keo theo (tranh mo coi).
+      const seasons = await this.seasonDb.findMany({ where: { movieId: id }, select: { id: true } });
+      const seasonIds = seasons.map((s) => s.id);
+      if (seasonIds.length) {
+        await this.trailerDb.deleteMany({ where: { seasonId: { in: seasonIds } } });
+        await this.prisma.catalogEpisode.deleteMany({ where: { seasonId: { in: seasonIds } } as any });
+      }
+      await this.trailerDb.deleteMany({ where: { movieId: id } });
+      await this.prisma.catalogEpisode.deleteMany({ where: { movieId: id } });
+      await this.seasonDb.deleteMany({ where: { movieId: id } });
+    }
   }
 
   async list(name: string, opts: { page?: number; limit?: number; q?: string } = {}): Promise<any> {
@@ -309,20 +350,27 @@ export class CatalogService implements OnModuleInit {
     return this.prisma.catalogItem.count({ where: { entity } });
   }
 
-  // ---- Episodes (nam trong movie, bang catalog_episodes) ----
+  // ---- Episodes (nam trong movie, hoac trong season doi voi phim bo) ----
   async createEpisode(movieId: string, input: any): Promise<Episode> {
     await this.get('movies', movieId); // 404 neu movie khong ton tai
     const data = input || {};
     if (!data.title || !String(data.title).trim()) throw new Error('title is required');
-    const item = { ...data, movieId, id: data.id || nid('ep'), createdAt: new Date().toISOString() };
-    await this.prisma.catalogEpisode.create({ data: { id: item.id, movieId, data: item } });
+    const seasonId = data.seasonId || null;
+    if (seasonId) {
+      const s = await this.getSeason(seasonId);
+      if (s.movieId !== movieId) throw new Error('season khong thuoc phim nay');
+    }
+    const item = { ...data, movieId, seasonId, id: data.id || nid('ep'), createdAt: new Date().toISOString() };
+    await this.prisma.catalogEpisode.create({ data: { id: item.id, movieId, seasonId, data: item } as any });
     return item as Episode;
   }
 
-  async listEpisodes(movieId: string, page = 1, limit = 20): Promise<any> {
+  async listEpisodes(movieId: string, page = 1, limit = 20, seasonId?: string): Promise<any> {
     await this.get('movies', movieId); // 404 neu movie khong ton tai
+    const where: any = { movieId };
+    if (seasonId !== undefined) where.seasonId = seasonId || null;
     const rows = await this.prisma.catalogEpisode.findMany({
-      where: { movieId },
+      where: where as any,
       orderBy: { createdAt: 'desc' },
     });
     return paginate(rows.map((r) => r.data as any), page, limit);
@@ -337,13 +385,118 @@ export class CatalogService implements OnModuleInit {
   async updateEpisode(id: string, patch: any): Promise<Episode> {
     const cur = await this.getEpisode(id);
     const next = { ...cur, ...(patch || {}), id: cur.id, createdAt: cur.createdAt, movieId: cur.movieId };
-    await this.prisma.catalogEpisode.update({ where: { id }, data: { data: next } });
+    await this.prisma.catalogEpisode.update({
+      where: { id },
+      data: { data: next, seasonId: (next as any).seasonId ?? null } as any,
+    });
     return next as Episode;
   }
 
   async deleteEpisode(id: string): Promise<void> {
     await this.getEpisode(id);
     await this.prisma.catalogEpisode.delete({ where: { id } });
+  }
+
+  // ---- Seasons (mua / phan cua phim bo) ----
+  async createSeason(movieId: string, input: any): Promise<Season> {
+    await this.get('movies', movieId); // 404 neu movie khong ton tai
+    const data = input || {};
+    if (!data.title || !String(data.title).trim()) throw new Error('title is required');
+    const item = { ...data, movieId, id: data.id || nid('se'), createdAt: new Date().toISOString() };
+    await this.seasonDb.create({ data: { id: item.id, movieId, data: item } });
+    return item as Season;
+  }
+
+  async listSeasons(movieId: string, page = 1, limit = 50): Promise<any> {
+    await this.get('movies', movieId); // 404 neu movie khong ton tai
+    const rows = await this.seasonDb.findMany({
+      where: { movieId },
+      orderBy: { createdAt: 'desc' },
+    });
+    return paginate(rows.map((r) => r.data as any), page, limit);
+  }
+
+  async getSeason(id: string): Promise<Season> {
+    const row = await this.seasonDb.findUnique({ where: { id } });
+    if (!row) throw new Error('not found');
+    return row.data as unknown as Season;
+  }
+
+  async updateSeason(id: string, patch: any): Promise<Season> {
+    const cur = await this.getSeason(id);
+    const next = { ...cur, ...(patch || {}), id: cur.id, createdAt: cur.createdAt, movieId: cur.movieId };
+    await this.seasonDb.update({ where: { id }, data: { data: next } });
+    return next as Season;
+  }
+
+  async deleteSeason(id: string): Promise<void> {
+    const cur = await this.getSeason(id);
+    // Xoa mua thi don sach tap + trailer cua mua.
+    await this.trailerDb.deleteMany({ where: { seasonId: id } });
+    await this.prisma.catalogEpisode.deleteMany({ where: { seasonId: id } as any });
+    await this.seasonDb.delete({ where: { id } });
+  }
+
+  async setSeasonPublished(id: string, published: boolean): Promise<Season> {
+    return this.updateSeason(id, { isVisible: published });
+  }
+
+  async seasonCount(): Promise<number> {
+    return this.seasonDb.count();
+  }
+
+  // ---- Trailers (cung cau truc episode; o cap phim voi phim le, cap mua voi phim bo) ----
+  private async assertTrailerOwner(owner: { movieId?: string; seasonId?: string }): Promise<{ movieId: string | null; seasonId: string | null }> {
+    const movieId = owner.movieId || null;
+    const seasonId = owner.seasonId || null;
+    if (!!movieId === !!seasonId) throw new Error('trailer phai gan vao phim hoac mua (chi mot)');
+    if (movieId) await this.get('movies', movieId);
+    if (seasonId) await this.getSeason(seasonId);
+    return { movieId, seasonId };
+  }
+
+  async createTrailer(owner: { movieId?: string; seasonId?: string }, input: any): Promise<Trailer> {
+    const { movieId, seasonId } = await this.assertTrailerOwner(owner);
+    const data = input || {};
+    if (!data.title || !String(data.title).trim()) throw new Error('title is required');
+    const item = { ...data, movieId, seasonId, id: data.id || nid('tr'), createdAt: new Date().toISOString() };
+    await this.trailerDb.create({ data: { id: item.id, movieId, seasonId, data: item } });
+    return item as Trailer;
+  }
+
+  async listTrailers(owner: { movieId?: string; seasonId?: string }, page = 1, limit = 50): Promise<any> {
+    const { movieId, seasonId } = await this.assertTrailerOwner(owner);
+    const rows = await this.trailerDb.findMany({
+      where: movieId ? { movieId } : { seasonId },
+      orderBy: { createdAt: 'desc' },
+    });
+    return paginate(rows.map((r) => r.data as any), page, limit);
+  }
+
+  async getTrailer(id: string): Promise<Trailer> {
+    const row = await this.trailerDb.findUnique({ where: { id } });
+    if (!row) throw new Error('not found');
+    return row.data as unknown as Trailer;
+  }
+
+  async updateTrailer(id: string, patch: any): Promise<Trailer> {
+    const cur = await this.getTrailer(id);
+    const next = { ...cur, ...(patch || {}), id: cur.id, createdAt: cur.createdAt, movieId: cur.movieId, seasonId: cur.seasonId };
+    await this.trailerDb.update({ where: { id }, data: { data: next } });
+    return next as Trailer;
+  }
+
+  async deleteTrailer(id: string): Promise<void> {
+    await this.getTrailer(id);
+    await this.trailerDb.delete({ where: { id } });
+  }
+
+  async setTrailerPublished(id: string, published: boolean): Promise<Trailer> {
+    return this.updateTrailer(id, { isVisible: published });
+  }
+
+  async trailerCount(): Promise<number> {
+    return this.trailerDb.count();
   }
 
   // ---- Xuat ban / an noi dung VOD (cong tac isVisible) ----

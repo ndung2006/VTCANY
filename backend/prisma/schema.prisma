@@ -382,12 +382,40 @@ model CatalogItem {
 model CatalogEpisode {
   id        String   @id
   movieId   String   @map("movie_id")
+  seasonId  String?  @map("season_id") // tap thuoc mua (phim bo); null = tap truc tiep cua phim (phim le)
   data      Json
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@index([movieId, createdAt])
+  @@index([seasonId, createdAt])
   @@map("catalog_episodes")
+}
+
+// Mua / phan cua phim bo (theo mau VTCPlay CMS): trailer + tap phim nam theo mua.
+model CatalogSeason {
+  id        String   @id
+  movieId   String   @map("movie_id")
+  data      Json
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([movieId, createdAt])
+  @@map("catalog_seasons")
+}
+
+// Trailer: cung cau truc nhu episode; gan o cap phim (phim le) hoac cap mua (phim bo).
+model CatalogTrailer {
+  id        String   @id
+  movieId   String?  @map("movie_id")
+  seasonId  String?  @map("season_id")
+  data      Json
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([movieId, createdAt])
+  @@index([seasonId, createdAt])
+  @@map("catalog_trailers")
 }
 
 model CatalogSetting {

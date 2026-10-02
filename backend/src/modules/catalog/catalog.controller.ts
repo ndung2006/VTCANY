@@ -76,12 +76,12 @@ export class CatalogController {
     } catch { /* audit khong duoc lam hong request chinh */ }
   }
 
-  // ---- Episodes (nam trong movie) ----
+  // ---- Episodes (nam trong movie, hoac trong season doi voi phim bo) ----
   @RequirePerms('catalog:read')
   @Get('movies/:id/episodes')
-  async listEpisodes(@Param('id') id: string, @Query('page') page?: string, @Query('limit') limit?: string) {
+  async listEpisodes(@Param('id') id: string, @Query('page') page?: string, @Query('limit') limit?: string, @Query('seasonId') seasonId?: string) {
     try {
-      return await this.catalog.listEpisodes(id, Number(page) || 1, Number(limit) || 20);
+      return await this.catalog.listEpisodes(id, Number(page) || 1, Number(limit) || 20, seasonId);
     } catch (e) { this.bad(e); }
   }
 
@@ -93,6 +93,152 @@ export class CatalogController {
       this.log(req, 'create', 'episodes', ep.id);
       return ep;
     } catch (e) { this.bad(e); }
+  }
+
+  // ---- Seasons (mua / phan cua phim bo) ----
+  @RequirePerms('catalog:read')
+  @Get('movies/:id/seasons')
+  async listSeasons(@Param('id') id: string, @Query('page') page?: string, @Query('limit') limit?: string) {
+    try {
+      return await this.catalog.listSeasons(id, Number(page) || 1, Number(limit) || 50);
+    } catch (e) { this.bad(e); }
+  }
+
+  @RequirePerms('catalog:write')
+  @Post('movies/:id/seasons')
+  async createSeason(@Param('id') id: string, @Body() body: any, @Req() req: any) {
+    try {
+      const s = await this.catalog.createSeason(id, body || {});
+      this.log(req, 'create', 'seasons', s.id);
+      return s;
+    } catch (e) { this.bad(e); }
+  }
+
+  @RequirePerms('catalog:write')
+  @Patch('seasons/:id')
+  async updateSeason(@Param('id') id: string, @Body() body: any, @Req() req: any) {
+    try {
+      const s = await this.catalog.updateSeason(id, body || {});
+      this.log(req, 'update', 'seasons', id);
+      return s;
+    } catch (e) { this.bad(e); }
+  }
+
+  @RequirePerms('catalog:write')
+  @Delete('seasons/:id')
+  async deleteSeason(@Param('id') id: string, @Req() req: any) {
+    try {
+      await this.catalog.deleteSeason(id);
+      this.log(req, 'delete', 'seasons', id);
+      return { ok: true };
+    } catch (e) { this.bad(e); }
+  }
+
+  @RequirePerms('catalog:write')
+  @Post('seasons/:id/publish')
+  async publishSeason(@Param('id') id: string, @Req() req: any) {
+    try {
+      const s = await this.catalog.setSeasonPublished(id, true);
+      this.log(req, 'publish', 'seasons', id);
+      return s;
+    } catch (e) { this.bad(e); }
+  }
+
+  @RequirePerms('catalog:write')
+  @Post('seasons/:id/unpublish')
+  async unpublishSeason(@Param('id') id: string, @Req() req: any) {
+    try {
+      const s = await this.catalog.setSeasonPublished(id, false);
+      this.log(req, 'unpublish', 'seasons', id);
+      return s;
+    } catch (e) { this.bad(e); }
+  }
+
+  // ---- Trailers (cap phim voi phim le, cap mua voi phim bo) ----
+  @RequirePerms('catalog:read')
+  @Get('movies/:id/trailers')
+  async listMovieTrailers(@Param('id') id: string, @Query('page') page?: string, @Query('limit') limit?: string) {
+    try {
+      return await this.catalog.listTrailers({ movieId: id }, Number(page) || 1, Number(limit) || 50);
+    } catch (e) { this.bad(e); }
+  }
+
+  @RequirePerms('catalog:write')
+  @Post('movies/:id/trailers')
+  async createMovieTrailer(@Param('id') id: string, @Body() body: any, @Req() req: any) {
+    try {
+      const t = await this.catalog.createTrailer({ movieId: id }, body || {});
+      this.log(req, 'create', 'trailers', t.id);
+      return t;
+    } catch (e) { this.bad(e); }
+  }
+
+  @RequirePerms('catalog:read')
+  @Get('seasons/:id/trailers')
+  async listSeasonTrailers(@Param('id') id: string, @Query('page') page?: string, @Query('limit') limit?: string) {
+    try {
+      return await this.catalog.listTrailers({ seasonId: id }, Number(page) || 1, Number(limit) || 50);
+    } catch (e) { this.bad(e); }
+  }
+
+  @RequirePerms('catalog:write')
+  @Post('seasons/:id/trailers')
+  async createSeasonTrailer(@Param('id') id: string, @Body() body: any, @Req() req: any) {
+    try {
+      const t = await this.catalog.createTrailer({ seasonId: id }, body || {});
+      this.log(req, 'create', 'trailers', t.id);
+      return t;
+    } catch (e) { this.bad(e); }
+  }
+
+  @RequirePerms('catalog:write')
+  @Patch('trailers/:id')
+  async updateTrailer(@Param('id') id: string, @Body() body: any, @Req() req: any) {
+    try {
+      const t = await this.catalog.updateTrailer(id, body || {});
+      this.log(req, 'update', 'trailers', id);
+      return t;
+    } catch (e) { this.bad(e); }
+  }
+
+  @RequirePerms('catalog:write')
+  @Delete('trailers/:id')
+  async deleteTrailer(@Param('id') id: string, @Req() req: any) {
+    try {
+      await this.catalog.deleteTrailer(id);
+      this.log(req, 'delete', 'trailers', id);
+      return { ok: true };
+    } catch (e) { this.bad(e); }
+  }
+
+  @RequirePerms('catalog:write')
+  @Post('trailers/:id/publish')
+  async publishTrailer(@Param('id') id: string, @Req() req: any) {
+    try {
+      const t = await this.catalog.setTrailerPublished(id, true);
+      this.log(req, 'publish', 'trailers', id);
+      return t;
+    } catch (e) { this.bad(e); }
+  }
+
+  @RequirePerms('catalog:write')
+  @Post('trailers/:id/unpublish')
+  async unpublishTrailer(@Param('id') id: string, @Req() req: any) {
+    try {
+      const t = await this.catalog.setTrailerPublished(id, false);
+      this.log(req, 'unpublish', 'trailers', id);
+      return t;
+    } catch (e) { this.bad(e); }
+  }
+
+  @RequirePerms('catalog:read')
+  @Get('trailers/:id/play')
+  async trailerPlay(@Param('id') id: string) {
+    try {
+      return await this.vod.resolvePlay('trailer', id, { admin: true });
+    } catch (e: any) {
+      this.vodBad(e);
+    }
   }
 
   @RequirePerms('catalog:write')
