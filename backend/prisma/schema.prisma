@@ -428,3 +428,18 @@ model Category {
   @@index([isVisible, sortOrder])
   @@map("categories")
 }
+
+// Nguon phat VTCAIO cau hinh trong CMS (nhieu domain khac nhau):
+// admin nhap ten mien + token key, quet thu kenh, kich hoat nguon dung cho runtime.
+// Runtime uu tien nguon active trong DB, fallback ve env MEDIA_BASE_URL/VTC_PARTNER_KEY.
+model TvAioSource {
+  id        String   @id
+  name      String
+  domain    String   // https://luuchieu1.vtcplay.vn (khong trailing slash)
+  tokenKey  String   @map("token_key")
+  isActive  Boolean  @default(false) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("tv_aio_sources")
+}

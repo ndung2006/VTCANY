@@ -1,5 +1,19 @@
 <template>
   <div class="flex flex-col gap-6">
+    <!-- Cau hinh nguon phat VTCAIO: nhieu domain + token key, quet kenh truoc khi kich hoat -->
+    <div class="surface-card p-4">
+      <div class="mb-2 flex flex-wrap items-center gap-2">
+        <h2 class="font-semibold">Nguồn phát VTCAIO</h2>
+        <Tag v-if="activeSource" severity="success" :value="`Đang dùng: ${activeSource.name}`" />
+        <Tag v-else severity="warn" value="Chưa cấu hình — đang dùng env server" />
+        <span v-if="activeSource" class="text-xs text-neutral-500">{{ activeSource.domain }}</span>
+        <div class="flex-1" />
+        <Button v-if="can('catalog:write')" label="Quét kênh" icon="pi pi-radar" size="small" severity="info" @click="openScan()" />
+        <Button v-if="can('catalog:write')" label="Quản lý nguồn" icon="pi pi-server" size="small" outlined @click="srcDlg = true" />
+      </div>
+      <p class="text-xs text-neutral-500">Nhập tên miền và token key của các trang VTCAIO, quét thử kênh trước khi kích hoạt. Nguồn được kích hoạt sẽ cấp danh sách kênh, link phát và EPG cho toàn hệ thống.</p>
+    </div>
+
     <!-- Quan ly hien thi kenh: nguon tu VTC AIO, BE quyet dinh kenh nao duoc hien thi -->
     <div class="surface-card p-4">
       <div class="mb-3 flex flex-wrap items-center gap-2">
@@ -176,6 +190,85 @@
         <Button label="Nhập" icon="pi pi-upload" :loading="importing" @click="doImport" :disabled="!impFile" />
       </template>
     </Dialog>
+
+    <!-- Dialog quan ly nguon phat VTCAIO -->
+    <Dialog v-model:visible="srcDlg" modal header="Nguồn phát VTCAIO" class="w-full max-w-3xl" @show="loadSources">
+      <div class="mb-3 flex justify-end">
+        <Button v-if="can('catalog:write')" label="Thêm nguồn" icon="pi pi-plus" size="small" @click="openSrcAdd" />
+      </div>
+      <DataTable :value="sources" :loading="srcLoading" size="small">
+        <Column field="name" header="Tên" />
+        <Column field="domain" header="Tên miền" />
+        <Column header="Token key" style="width:8rem">
+          <template #body="{ data }"><span class="font-mono text-xs">{{ data.keyHint }}</span></template>
+        </Column>
+        <Column header="Trạng thái" style="width:9rem">
+          <template #body="{ data }">
+            <Tag v-if="data.isActive" value="Đang dùng" severity="success" />
+            <Tag v-else value="Chưa dùng" severity="secondary" />
+          </template>
+        </Column>
+        <Column header="Thao tác" style="width:12rem">
+          <template #body="{ data }">
+            <Button v-if="!data.isActive && can('catalog:write')" label="Kích hoạt" size="small" text @click="activateSource(data)" />
+            <Button v-if="can('catalog:write')" icon="pi pi-radar" size="small" text v-tooltip.top="'Quét kênh thử'" @click="openScan(data.id)" />
+            <Button v-if="can('catalog:write')" icon="pi pi-pencil" size="small" text @click="openSrcEdit(data)" />
+            <Button v-if="can('catalog:write')" icon="pi pi-trash" size="small" text severity="danger" @click="removeSource(data)" />
+          </template>
+        </Column>
+      </DataTable>
+      <p class="mt-2 text-xs text-neutral-500">Token key không bao giờ hiển thị đầy đủ. Nguồn được kích hoạt sẽ cấp kênh/link/EPG cho toàn hệ thống (thay cho cấu hình env server).</p>
+    </Dialog>
+
+    <!-- Dialog them/sua nguon VTCAIO -->
+    <Dialog v-model:visible="srcFormDlg" modal :header="srcEditing ? 'Sửa nguồn VTCAIO' : 'Thêm nguồn VTCAIO'" class="w-full max-w-xl">
+      <div class="flex flex-col gap-3">
+        <div><label class="field-label">Tên *</label><InputText v-model="srcForm.name" class="w-full" placeholder="vd: Luuchieu1" /></div>
+        <div><label class="field-label">Tên miền *</label><InputText v-model="srcForm.domain" class="w-full" placeholder="https://luuchieu1.vtcplay.vn" /></div>
+        <div>
+          <label class="field-label">Token key {{ srcEditing ? '(để trống = giữ nguyên)' : '*' }}</label>
+          <Password v-model="srcForm.tokenKey" class="w-full" :feedback="false" toggle-mask placeholder="Partner key của trang VTCAIO" />
+        </div>
+      </div>
+      <template #footer>
+        <Button label="Đóng" text @click="srcFormDlg = false" />
+        <Button label="Lưu" :loading="srcSaving" :disabled="!srcForm.name.trim() || !srcForm.domain.trim() || (!srcEditing && !srcForm.tokenKey.trim())" @click="saveSource" />
+      </template>
+    </Dialog>
+
+    <!-- Dialog quet kenh thu -->
+    <Dialog v-model:visible="scanDlg" modal header="Quét kênh từ VTCAIO" class="w-full max-w-3xl">
+      <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
+        <div><label class="field-label">Tên miền *</label><InputText v-model="scanForm.domain" class="w-full" placeholder="https://luuchieu1.vtcplay.vn" /></div>
+        <div>
+          <label class="field-label">Token key *</label>
+          <Password v-model="scanForm.tokenKey" class="w-full" :feedback="false" toggle-mask placeholder="Để trống nếu quét nguồn đã lưu" />
+        </div>
+      </div>
+      <div class="mt-3 flex items-center gap-2">
+        <Button label="Quét kênh" icon="pi pi-radar" :loading="scanning" :disabled="!scanForm.domain.trim()" @click="doScan" />
+        <span v-if="scanResult" class="text-sm text-neutral-400">Tìm thấy {{ scanResult.total }} kênh ({{ scanResult.live }} đang phát)</span>
+      </div>
+      <p v-if="scanError" class="mt-2 text-sm text-red-400">{{ scanError }}</p>
+      <DataTable v-if="scanResult" :value="scanResult.channels" size="small" paginator :rows="15" class="mt-3">
+        <Column field="name" header="Tên kênh" sortable />
+        <Column field="status" header="Trạng thái" style="width:8rem" />
+        <Column header="Đang phát" style="width:7rem">
+          <template #body="{ data }"><Tag :value="data.live ? 'Có' : 'Không'" :severity="data.live ? 'success' : 'secondary'" /></template>
+        </Column>
+        <Column header="Audio" style="width:6rem">
+          <template #body="{ data }"><Tag v-if="data.audioOnly" value="Radio" severity="info" /><span v-else class="text-neutral-500">—</span></template>
+        </Column>
+        <Column header="EPG" style="width:6rem">
+          <template #body="{ data }"><Tag :value="data.hasEpg ? 'Có' : 'Không'" :severity="data.hasEpg ? 'info' : 'secondary'" /></template>
+        </Column>
+      </DataTable>
+      <template #footer>
+        <Button label="Đóng" text @click="scanDlg = false" />
+        <Button v-if="scanResult && can('catalog:write')" label="Lưu nguồn này" icon="pi pi-save" outlined @click="saveScannedSource" />
+      </template>
+    </Dialog>
+
     <Toast />
     <ConfirmDialog />
   </div>
@@ -383,5 +476,120 @@ async function doImport() {
   } finally { importing.value = false; }
 }
 
-onMounted(() => { loadChannels(); loadPlans(); });
+onMounted(() => { loadChannels(); loadPlans(); loadSources(); });
+
+// ---- Nguon phat VTCAIO: nhieu domain + token key, quet kenh truoc khi kich hoat ----
+const sources = ref<any[]>([]);
+const srcLoading = ref(false);
+const srcDlg = ref(false);
+const srcFormDlg = ref(false);
+const srcEditing = ref<any>(null);
+const srcSaving = ref(false);
+const srcForm = ref({ name: '', domain: '', tokenKey: '' });
+const activeSource = computed(() => sources.value.find((s) => s.isActive) || null);
+
+async function loadSources() {
+  srcLoading.value = true;
+  try {
+    const r = await api.get<any>('/admin/tv/aio-sources');
+    sources.value = r.data || [];
+  } catch { /* bo qua — hien thi fallback env */ }
+  finally { srcLoading.value = false; }
+}
+function openSrcAdd() {
+  srcEditing.value = null;
+  srcForm.value = { name: '', domain: '', tokenKey: '' };
+  srcFormDlg.value = true;
+}
+function openSrcEdit(s: any) {
+  srcEditing.value = s;
+  srcForm.value = { name: s.name || '', domain: s.domain || '', tokenKey: '' };
+  srcFormDlg.value = true;
+}
+async function saveSource() {
+  srcSaving.value = true;
+  try {
+    const body: any = { name: srcForm.value.name.trim(), domain: srcForm.value.domain.trim() };
+    if (srcForm.value.tokenKey.trim()) body.tokenKey = srcForm.value.tokenKey.trim();
+    if (srcEditing.value) await api.patch(`/admin/tv/aio-sources/${srcEditing.value.id}`, body);
+    else await api.post('/admin/tv/aio-sources', { ...body, tokenKey: body.tokenKey || '' });
+    toast.add({ severity: 'success', summary: 'Xong', detail: 'Đã lưu nguồn VTCAIO', life: 3000 });
+    srcFormDlg.value = false;
+    loadSources();
+  } catch (e: any) {
+    toast.add({ severity: 'error', summary: 'Lỗi', detail: e?.response?.data?.error?.message || 'Lưu thất bại', life: 3000 });
+  } finally { srcSaving.value = false; }
+}
+async function activateSource(s: any) {
+  try {
+    await api.post(`/admin/tv/aio-sources/${s.id}/activate`, {});
+    toast.add({ severity: 'success', summary: 'Xong', detail: `Đã kích hoạt nguồn "${s.name}" — hệ thống sẽ lấy kênh/link/EPG từ ${s.domain}`, life: 4000 });
+    loadSources();
+    loadChannels();
+  } catch (e: any) {
+    toast.add({ severity: 'error', summary: 'Lỗi', detail: e?.response?.data?.error?.message || 'Kích hoạt thất bại', life: 3000 });
+  }
+}
+function removeSource(s: any) {
+  confirm.require({
+    message: `Xóa nguồn "${s.name}"?`, header: 'Xác nhận', icon: 'pi pi-exclamation-triangle',
+    acceptLabel: 'Xóa', rejectLabel: 'Hủy', acceptClass: 'p-button-danger',
+    accept: async () => {
+      try {
+        await api.del(`/admin/tv/aio-sources/${s.id}`);
+        toast.add({ severity: 'success', summary: 'Xong', detail: 'Đã xóa', life: 3000 });
+        loadSources();
+      } catch { toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Xóa thất bại', life: 3000 }); }
+    },
+  });
+}
+
+// ---- Quet kenh thu ----
+const scanDlg = ref(false);
+const scanning = ref(false);
+const scanError = ref('');
+const scanResult = ref<any>(null);
+const scanForm = ref({ domain: '', tokenKey: '', sourceId: '' });
+
+function openScan(sourceId?: string) {
+  scanError.value = '';
+  scanResult.value = null;
+  if (sourceId) {
+    const s = sources.value.find((x) => x.id === sourceId);
+    scanForm.value = { domain: s?.domain || '', tokenKey: '', sourceId };
+  } else if (activeSource.value) {
+    scanForm.value = { domain: activeSource.value.domain, tokenKey: '', sourceId: activeSource.value.id };
+  } else {
+    scanForm.value = { domain: 'https://luuchieu1.vtcplay.vn', tokenKey: '', sourceId: '' };
+  }
+  scanDlg.value = true;
+}
+async function doScan() {
+  scanning.value = true;
+  scanError.value = '';
+  scanResult.value = null;
+  try {
+    const body: any = scanForm.value.tokenKey.trim()
+      ? { domain: scanForm.value.domain.trim(), tokenKey: scanForm.value.tokenKey.trim() }
+      : scanForm.value.sourceId
+        ? { sourceId: scanForm.value.sourceId }
+        : { domain: scanForm.value.domain.trim(), tokenKey: '' };
+    const r = await api.post<any>('/admin/tv/aio-sources/scan', body);
+    scanResult.value = r;
+    if (!r?.channels?.length) scanError.value = 'Không tìm thấy kênh nào — kiểm tra lại token key.';
+  } catch (e: any) {
+    scanError.value = e?.response?.data?.error?.message || 'Quét kênh thất bại';
+  } finally { scanning.value = false; }
+}
+async function saveScannedSource() {
+  if (!scanResult.value) return;
+  srcEditing.value = null;
+  srcForm.value = {
+    name: new URL(scanForm.value.domain).hostname.replace(/^www\./, ''),
+    domain: scanForm.value.domain.trim(),
+    tokenKey: scanForm.value.tokenKey.trim(),
+  };
+  scanDlg.value = false;
+  srcFormDlg.value = true;
+}
 </script>
