@@ -15,6 +15,7 @@ function fakePrismaForSeed() {
   const prisma = {
     catalogItem: {
       count: async ({ where } = {}) => items.filter((i) => !where?.entity || i.entity === where.entity).length,
+      findMany: async ({ where } = {}) => items.filter((i) => !where?.entity || i.entity === where.entity),
       create: async ({ data }) => { items.push(data); return data; },
     },
     category: {
@@ -51,6 +52,25 @@ test('CatalogService seed 26 khoi giao dien mac dinh theo tung muc', async () =>
   // seed lan 2 khong tao trung
   await svc.onModuleInit();
   assert.equal(prisma._items.filter((i) => i.entity === 'rails').length, 26);
+});
+
+test('CatalogService backfill: section da co rail thi khong seed them', async () => {
+  const prisma = fakePrismaForSeed();
+  // Gia lap: da co 1 rail o section home (nhu du lieu test tren production)
+  prisma._items.push({
+    id: 'rl-old', entity: 'rails',
+    data: { id: 'rl-old', title: 'Test cu', section: 'home', contentType: 'tv', sortOrder: 1, isVisible: true, createdAt: new Date().toISOString() },
+  });
+  const svc = new CatalogService(prisma);
+  await svc.onModuleInit();
+  const rails = prisma._items.filter((i) => i.entity === 'rails').map((i) => i.data);
+  // home giu nguyen 1 rail cu; 4 section con lai duoc seed (5+5+5+3=18)
+  assert.equal(rails.length, 19);
+  assert.equal(rails.filter((r) => r.section === 'home').length, 1);
+  assert.equal(rails.filter((r) => r.section === 'movies').length, 5);
+  assert.equal(rails.filter((r) => r.section === 'video').length, 5);
+  assert.equal(rails.filter((r) => r.section === 'short').length, 5);
+  assert.equal(rails.filter((r) => r.section === 'entertainment').length, 3);
 });
 
 function fakeCatalog(rails, itemsByCat) {

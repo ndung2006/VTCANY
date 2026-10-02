@@ -297,13 +297,23 @@ export class CatalogService implements OnModuleInit {
       this.logger.warn(`Bo qua seed plans (DB chua san sang?): ${(e as Error).message}`);
     }
     // Seed khoi giao dien (rails) mac dinh theo tung muc — giong cac rail dang ON
-    // tren VTCPlay. Chi khi chua co rail nao. categorySlug duoc resolve sang
-    // categoryId luc seed (neu danh muc chua co thi endpoint tu resolve theo slug).
+    // tren VTCPlay. Backfill theo tung section con thieu (idempotent): section nao
+    // chua co rail nao thi seed cac khoi mac dinh cua section do; khong dung den
+    // rail admin da tao. categorySlug duoc resolve sang categoryId luc seed
+    // (neu danh muc chua co thi endpoint tu resolve theo slug).
     try {
-      const n = await this.prisma.catalogItem.count({ where: { entity: 'rails' } });
-      if (n === 0) {
-        const catDb: any = (this.prisma as any).category;
-        for (const s of RAIL_SEED) {
+      const catDb: any = (this.prisma as any).category;
+      const existing = await this.prisma.catalogItem.findMany({ where: { entity: 'rails' } });
+      const hasSection = new Set((existing || []).map((r: any) => (r.data as any)?.section));
+      const bySection = new Map<string, typeof RAIL_SEED>();
+      for (const s of RAIL_SEED) {
+        if (!bySection.has(s.section)) bySection.set(s.section, []);
+        bySection.get(s.section)!.push(s);
+      }
+      let seeded = 0;
+      for (const [section, seeds] of bySection) {
+        if (hasSection.has(section)) continue;
+        for (const s of seeds) {
           let categoryId: string | undefined;
           if (s.categorySlug && catDb) {
             try {
@@ -322,9 +332,10 @@ export class CatalogService implements OnModuleInit {
             style: 'Mặc định',
             isVisible: true,
           });
+          seeded += 1;
         }
-        this.logger.log(`Da seed ${RAIL_SEED.length} khoi giao dien mac dinh.`);
       }
+      if (seeded > 0) this.logger.log(`Da seed ${seeded} khoi giao dien mac dinh.`);
     } catch (e) {
       this.logger.warn(`Bo qua seed rails (DB chua san sang?): ${(e as Error).message}`);
     }
