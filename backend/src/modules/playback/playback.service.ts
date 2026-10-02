@@ -8,7 +8,7 @@ export class PlaybackService {
 
   private cfg() {
     return {
-      baseUrl: this.config.get<string>('MEDIA_BASE_URL', 'https://vtcaio.vtctech.xyz'),
+      baseUrl: this.config.get<string>('MEDIA_BASE_URL', 'https://luuchieu1.vtcplay.vn'),
       partnerKey: this.config.get<string>('VTC_PARTNER_KEY', ''),
     };
   }
