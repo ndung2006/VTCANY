@@ -111,53 +111,114 @@
       </Dialog>
     </template>
 
-    <!-- TAB 3: Khối giao diện theo mục (catalog) -->
+    <!-- TAB 3: Khối giao diện theo mục (giống CMS VTCPlay: 6 trang con) -->
     <template v-if="tab === 'rails'">
-      <div class="flex items-center justify-between">
-        <p class="text-sm text-neutral-400">Tổng: {{ railMeta.total }} khối</p>
-        <Button v-if="can('catalog:write')" label="Thêm khối" icon="pi pi-plus" @click="openRailAdd" />
-      </div>
-      <div class="surface-card p-4">
-        <DataTable :value="rails" :loading="railLoading" paginator :rows="20" :total-records="railMeta.total"
-          lazy :first="(railMeta.page - 1) * railMeta.limit" @page="(e: any) => { railMeta.page = e.page + 1; loadRails(); }" size="small">
-          <Column field="title" header="Tiêu đề" />
-          <Column header="Mục">
-            <template #body="{ data }">{{ sectionLabel(data.section) }}</template>
-          </Column>
-          <Column field="platform" header="Nền tảng" />
-          <Column field="sortOrder" header="Thứ tự" style="width:6rem" />
-          <Column header="Hiển thị" style="width:8rem">
-            <template #body="{ data }"><Tag :value="data.isVisible ? 'Bật' : 'Tắt'" :severity="sevVisible(data.isVisible)" /></template>
-          </Column>
-          <Column header="Thao tác" style="min-width:10rem">
-            <template #body="{ data }">
-              <Button v-if="can('catalog:write')" label="Sửa" size="small" text @click="openRailEdit(data)" />
-              <Button v-if="can('catalog:write')" label="Xóa" size="small" text severity="danger" @click="railCtl.confirmDelete(confirm, data.id, data.title)" />
-            </template>
-          </Column>
-        </DataTable>
+      <div class="flex flex-wrap items-center gap-2">
+        <Button v-for="s in railSections" :key="s.value" :label="s.label" size="small"
+          :severity="railSection === s.value ? undefined : 'secondary'" :outlined="railSection !== s.value"
+          @click="railSection = s.value" />
+        <span class="ml-auto flex items-center gap-2">
+          <label class="text-sm text-neutral-400">Nền tảng:</label>
+          <Dropdown v-model="railPlatform" :options="railPlatformOpts" option-label="label" option-value="value"
+            class="w-40" size="small" />
+        </span>
       </div>
 
-      <Dialog v-model:visible="railDlg" modal :header="editingRail ? 'Sửa khối' : 'Thêm khối'" class="w-full max-w-xl">
-        <div class="grid grid-cols-2 gap-3">
-          <div class="col-span-2"><label class="field-label">Tiêu đề *</label><InputText v-model="railForm.title" class="w-full" /></div>
-          <div><label class="field-label">Mục</label>
-            <Dropdown v-model="railForm.section" :options="sections" option-label="label" option-value="value" class="w-full" />
+      <div class="flex items-center justify-between">
+        <p class="text-sm text-neutral-400">Tổng: {{ rails.length }} khối — kéo <i class="pi pi-bars"></i> để sắp xếp</p>
+        <Button v-if="can('catalog:write')" label="Thêm khối" icon="pi pi-plus" @click="openRailAdd" />
+      </div>
+
+      <div class="surface-card overflow-x-auto p-2">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="border-b border-neutral-700 text-left text-neutral-400">
+              <th class="w-10 px-2 py-2"></th>
+              <th class="w-20 px-2 py-2">Thứ tự</th>
+              <th class="px-2 py-2">Tiêu đề</th>
+              <th class="px-2 py-2">Loại nội dung</th>
+              <th class="px-2 py-2">Danh mục</th>
+              <th class="w-28 px-2 py-2">Nền tảng</th>
+              <th class="w-24 px-2 py-2">Hiển thị</th>
+              <th class="w-28 px-2 py-2">Thao tác</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(r, i) in rails" :key="r.id"
+              draggable="true"
+              @dragstart="onRailDragStart(i)" @dragover.prevent @drop="onRailDrop(i)"
+              class="border-b border-neutral-800 transition hover:bg-neutral-800/40"
+              :class="{ 'opacity-40': dragIdx === i }">
+              <td class="cursor-move px-2 py-2 text-neutral-500"><i class="pi pi-bars"></i></td>
+              <td class="px-2 py-2">{{ r.sortOrder ?? i + 1 }}</td>
+              <td class="px-2 py-2 font-medium">{{ r.title }}</td>
+              <td class="px-2 py-2">{{ contentTypeLabel(r.contentType) }}</td>
+              <td class="px-2 py-2">{{ categoryName(r.categoryId) }}</td>
+              <td class="px-2 py-2">{{ platformLabel(r.platform) }}</td>
+              <td class="px-2 py-2">
+                <InputSwitch :model-value="r.isVisible !== false"
+                  @update:model-value="(v: boolean) => toggleRailVisible(r, v)"
+                  :disabled="!can('catalog:write')" />
+              </td>
+              <td class="px-2 py-2">
+                <Button v-if="can('catalog:write')" icon="pi pi-pencil" size="small" text rounded severity="success"
+                  aria-label="Sửa" @click="openRailEdit(r)" />
+                <Button v-if="can('catalog:write')" icon="pi pi-trash" size="small" text rounded severity="danger"
+                  aria-label="Xóa" @click="removeRail(r)" />
+              </td>
+            </tr>
+            <tr v-if="!rails.length && !railLoading">
+              <td colspan="8" class="px-2 py-6 text-center text-neutral-500">Chưa có khối nào cho mục này.</td>
+            </tr>
+          </tbody>
+        </table>
+        <div v-if="railLoading" class="p-4 text-sm text-neutral-400">Đang tải...</div>
+      </div>
+
+      <Dialog v-model:visible="railDlg" modal :header="editingRail ? 'Cập nhật khối giao diện' : 'Thêm khối giao diện'" class="w-full max-w-xl">
+        <div class="flex flex-col gap-3">
+          <div><label class="field-label">Tiêu đề *</label><InputText v-model="railForm.title" class="w-full" /></div>
+          <div class="grid grid-cols-2 gap-3">
+            <div><label class="field-label">Nền tảng hiển thị</label>
+              <Dropdown v-model="railForm.platform" :options="railPlatformOpts.slice(1)" option-label="label" option-value="value" class="w-full" />
+            </div>
+            <div><label class="field-label">Loại nội dung</label>
+              <Dropdown v-model="railForm.contentType" :options="contentTypeOpts" option-label="label" option-value="value" class="w-full" />
+            </div>
           </div>
-          <div><label class="field-label">Nền tảng</label>
-            <Dropdown v-model="railForm.platform" :options="['web', 'mobile']" class="w-full" />
+          <div v-if="railForm.contentType !== 'event'">
+            <label class="field-label">Danh mục *</label>
+            <Dropdown v-model="railForm.categoryId" :options="categoryOpts" option-label="name" option-value="id"
+              placeholder="— Chọn danh mục —" class="w-full" filter />
           </div>
-          <div><label class="field-label">Loại nội dung</label><InputText v-model="railForm.contentType" class="w-full" placeholder="vd: movies" /></div>
-          <div><label class="field-label">ID danh mục</label><InputText v-model="railForm.categoryId" class="w-full" /></div>
-          <div><label class="field-label">Kiểu hiển thị</label><InputText v-model="railForm.style" class="w-full" placeholder="vd: horizontal" /></div>
-          <div><label class="field-label">Thứ tự</label><InputNumber v-model="railForm.sortOrder" class="w-full" :use-grouping="false" /></div>
-          <div><label class="field-label">Hiển thị từ</label><Calendar v-model="railForm.visibleFrom" date-format="yy-mm-dd" show-icon class="w-full" /></div>
-          <div><label class="field-label">Hiển thị đến</label><Calendar v-model="railForm.visibleTo" date-format="yy-mm-dd" show-icon class="w-full" /></div>
-          <div class="col-span-2 flex items-center gap-2"><Checkbox v-model="railForm.isVisible" binary input-id="rvis" /><label for="rvis">Hiển thị</label></div>
+          <div class="grid grid-cols-2 gap-3">
+            <div><label class="field-label">Thứ tự *</label><InputNumber v-model="railForm.sortOrder" class="w-full" :use-grouping="false" /></div>
+            <div><label class="field-label">Style giao diện</label>
+              <Dropdown v-model="railForm.style" :options="['Mặc định']" class="w-full" />
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div><label class="field-label">Hiển thị từ ngày</label><Calendar v-model="railForm.visibleFrom" date-format="yy-mm-dd" show-icon class="w-full" /></div>
+            <div><label class="field-label">Hiển thị đến ngày</label><Calendar v-model="railForm.visibleTo" date-format="yy-mm-dd" show-icon class="w-full" /></div>
+          </div>
+          <div>
+            <label class="field-label">Trạng thái hiển thị</label>
+            <div class="flex gap-4">
+              <div class="flex items-center gap-2">
+                <RadioButton v-model="railForm.isVisible" input-id="rvis1" :value="true" />
+                <label for="rvis1">Hiển thị</label>
+              </div>
+              <div class="flex items-center gap-2">
+                <RadioButton v-model="railForm.isVisible" input-id="rvis2" :value="false" />
+                <label for="rvis2">Ẩn</label>
+              </div>
+            </div>
+          </div>
         </div>
         <template #footer>
-          <Button label="Hủy" text @click="railDlg = false" />
-          <Button :label="editingRail ? 'Lưu' : 'Tạo'" :loading="railSaving" @click="saveRail" :disabled="!railForm.title.trim()" />
+          <Button label="Đóng" text @click="railDlg = false" />
+          <Button :label="editingRail ? 'Lưu' : 'Lưu'" :loading="railSaving" @click="saveRail"
+            :disabled="!railForm.title.trim() || (railForm.contentType !== 'event' && !railForm.categoryId)" />
         </template>
       </Dialog>
     </template>
@@ -279,39 +340,152 @@ async function saveBanner() {
   if (ok) { bannerDlg.value = false; loadBanners(); }
 }
 
-// ---- TAB rails (catalog) ----
+// ---- TAB rails: khối giao diện theo mục (giống CMS VTCPlay) ----
+const railSections = [
+  { label: 'Trang chủ', value: 'home' },
+  { label: 'Truyền hình', value: 'tv' },
+  { label: 'Phim', value: 'movies' },
+  { label: 'Video', value: 'video' },
+  { label: 'Short', value: 'short' },
+  { label: 'Giải trí', value: 'entertainment' },
+];
+const railSection = ref('home');
+const railPlatformOpts = [
+  { label: 'Tất cả', value: '' },
+  { label: 'Website', value: 'web' },
+  { label: 'Mobile', value: 'mobile' },
+  { label: 'SmartTV', value: 'smarttv' },
+];
+const railPlatform = ref('');
+const contentTypeOpts = [
+  { label: 'Danh mục Phim', value: 'movie' },
+  { label: 'Danh mục Video', value: 'video' },
+  { label: 'Danh mục Short', value: 'short' },
+  { label: 'Danh mục Truyền hình', value: 'tv' },
+  { label: 'Sự kiện', value: 'event' },
+];
+// contentType -> appliesTo cua danh muc
+const typeToApplies: Record<string, string> = { movie: 'phim', video: 'video', short: 'short', tv: 'truyen-hinh' };
+function contentTypeLabel(v: string) { return contentTypeOpts.find((x) => x.value === v)?.label || v || '—'; }
+function platformLabel(v: string) { return railPlatformOpts.find((x) => x.value === v)?.label || v || '—'; }
+
 const railCtl = useCatalog('rails');
-const rails = railCtl.items;
-const railMeta = railCtl.meta;
-const railLoading = railCtl.loading;
-const loadRails = railCtl.load;
+const rails = ref<any[]>([]);
+const railLoading = ref(false);
+const allCats = ref<any[]>([]);
+
+async function loadRails() {
+  railLoading.value = true;
+  try {
+    const r = await api.get<any>('/admin/catalog/rails', { page: 1, limit: 200 });
+    rails.value = (r.data || [])
+      .filter((x: any) => x.section === railSection.value)
+      .filter((x: any) => !railPlatform.value || x.platform === railPlatform.value)
+      .sort((a: any, b: any) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+  } catch { toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Không tải được khối giao diện', life: 3000 }); }
+  finally { railLoading.value = false; }
+}
+async function loadCats() {
+  try { const r = await api.get<any>('/admin/categories'); allCats.value = r.data || []; }
+  catch { /* bo qua */ }
+}
+function categoryName(id: string) {
+  return allCats.value.find((c) => c.id === id)?.name || '—';
+}
+const categoryOpts = computed(() => {
+  const applies = typeToApplies[railForm.value.contentType];
+  return allCats.value.filter((c) => !applies || (c.appliesTo || []).includes(applies));
+});
+
 const railDlg = ref(false);
 const editingRail = ref<any>(null);
 const railSaving = ref(false);
-const railForm = ref({ title: '', section: 'home', platform: 'web', contentType: '', categoryId: '', style: '', sortOrder: 0, visibleFrom: null as any, visibleTo: null as any, isVisible: true });
+const railForm = ref({
+  title: '', platform: 'web', contentType: 'movie', categoryId: '',
+  sortOrder: 1, visibleFrom: null as any, visibleTo: null as any,
+  style: 'Mặc định', isVisible: true,
+});
 
 function openRailAdd() {
   editingRail.value = null;
-  railForm.value = { title: '', section: 'home', platform: 'web', contentType: '', categoryId: '', style: '', sortOrder: 0, visibleFrom: null, visibleTo: null, isVisible: true };
+  railForm.value = {
+    title: '', platform: 'web', contentType: railSection.value === 'movies' ? 'movie' : railSection.value === 'video' || railSection.value === 'entertainment' ? 'video' : railSection.value === 'short' ? 'short' : railSection.value === 'tv' ? 'tv' : 'movie',
+    categoryId: '', sortOrder: rails.value.length + 1,
+    visibleFrom: null, visibleTo: null, style: 'Mặc định', isVisible: true,
+  };
   railDlg.value = true;
 }
 function openRailEdit(r: any) {
   editingRail.value = r;
-  railForm.value = { title: r.title || '', section: r.section || 'home', platform: r.platform || 'web', contentType: r.contentType || '', categoryId: r.categoryId || '', style: r.style || '', sortOrder: r.sortOrder ?? 0, visibleFrom: toDate(r.visibleFrom), visibleTo: toDate(r.visibleTo), isVisible: r.isVisible !== false };
+  railForm.value = {
+    title: r.title || '', platform: r.platform || 'web', contentType: r.contentType || 'movie',
+    categoryId: r.categoryId || '', sortOrder: r.sortOrder ?? 1,
+    visibleFrom: toDate(r.visibleFrom), visibleTo: toDate(r.visibleTo),
+    style: r.style || 'Mặc định', isVisible: r.isVisible !== false,
+  };
   railDlg.value = true;
 }
 async function saveRail() {
   railSaving.value = true;
+  const cat = allCats.value.find((c) => c.id === railForm.value.categoryId);
   const ok = await railCtl.saveItem(editingRail.value?.id || null, {
-    ...railForm.value, visibleFrom: toIso(railForm.value.visibleFrom) || undefined, visibleTo: toIso(railForm.value.visibleTo) || undefined,
+    title: railForm.value.title.trim(),
+    section: railSection.value,
+    platform: railForm.value.platform,
+    contentType: railForm.value.contentType,
+    categoryId: railForm.value.categoryId || undefined,
+    categorySlug: cat?.slug,
+    sortOrder: railForm.value.sortOrder ?? 1,
+    visibleFrom: toIso(railForm.value.visibleFrom) || undefined,
+    visibleTo: toIso(railForm.value.visibleTo) || undefined,
+    style: railForm.value.style,
+    isVisible: railForm.value.isVisible,
   }, 'Đã lưu khối giao diện');
   railSaving.value = false;
   if (ok) { railDlg.value = false; loadRails(); }
 }
+async function toggleRailVisible(r: any, v: boolean) {
+  try {
+    await api.patch(`/admin/catalog/rails/${r.id}`, { isVisible: v });
+    r.isVisible = v;
+    toast.add({ severity: 'success', summary: 'Xong', detail: v ? 'Đã hiển thị' : 'Đã ẩn', life: 2000 });
+  } catch { toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Không đổi được trạng thái', life: 3000 }); }
+}
+
+function removeRail(r: any) {
+  confirm.require({
+    message: `Xóa khối "${r.title}"?`, header: 'Xác nhận', icon: 'pi pi-exclamation-triangle',
+    acceptLabel: 'Xóa', rejectLabel: 'Hủy', acceptClass: 'p-button-danger',
+    accept: async () => {
+      try {
+        await api.del(`/admin/catalog/rails/${r.id}`);
+        toast.add({ severity: 'success', summary: 'Xong', detail: 'Đã xóa', life: 3000 });
+        loadRails();
+      } catch { toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Xóa thất bại', life: 3000 }); }
+    },
+  });
+}
+
+// Keo-tha sap xep (giong VTCPlay): keo hang roi tha vao vi tri moi.
+const dragIdx = ref(-1);
+function onRailDragStart(i: number) { dragIdx.value = i; }
+async function onRailDrop(i: number) {
+  const from = dragIdx.value;
+  dragIdx.value = -1;
+  if (from < 0 || from === i) return;
+  const moved = rails.value.splice(from, 1)[0];
+  rails.value.splice(i, 0, moved);
+  rails.value.forEach((r, idx) => { r.sortOrder = idx + 1; });
+  try {
+    await Promise.all(rails.value.map((r) => api.patch(`/admin/catalog/rails/${r.id}`, { sortOrder: r.sortOrder })));
+    toast.add({ severity: 'success', summary: 'Xong', detail: 'Đã cập nhật thứ tự', life: 2000 });
+  } catch { toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Lưu thứ tự thất bại', life: 3000 }); loadRails(); }
+}
 
 watch(tab, (t) => {
   if (t === 'banners') loadBanners();
-  if (t === 'rails') loadRails();
+  if (t === 'rails') { loadCats(); loadRails(); }
 });
+watch([railSection, railPlatform], () => { if (tab.value === 'rails') loadRails(); });
 onMounted(load);
 </script>

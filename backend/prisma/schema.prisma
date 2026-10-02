@@ -16,28 +16,8 @@ datasource db {
 // ---------------------------------------------------------------------------
 // 2.1 Cụm Nội dung (Content)
 // ---------------------------------------------------------------------------
-
-model Category {
-  id          String     @id @default(uuid())
-  publicId    String     @unique @map("public_id") // 24hex
-  name        String
-  slug        String     @unique
-  parentId    String?    @map("parent_id")
-  parent      Category?  @relation("CategoryTree", fields: [parentId], references: [id])
-  children    Category[] @relation("CategoryTree")
-  icon        String?
-  thumbnail   String?
-  description String?
-  sortOrder   Int        @default(0) @map("sort_order")
-  isVisible   Boolean    @default(true) @map("is_visible")
-  platforms   String[]   // ["WEB","MOBILE","TV"]
-  appliesTo   String[]   @map("applies_to") // ["phim","video","short","tv"]
-  videos      Video[]    @relation("VideoCategories")
-  createdAt   DateTime   @default(now()) @map("created_at")
-  updatedAt   DateTime   @updatedAt @map("updated_at")
-
-  @@map("categories")
-}
+// Category: model Prisma duy nhất (Phase 1.1) nằm ở cuối file; bảng "categories"
+// đã được tạo bởi migration init 20251001110000_init.
 
 model Video {
   id                 String           @id @default(uuid())
@@ -66,7 +46,6 @@ model Video {
   status             String           @default("draft") // draft|pending|published|rejected
   publishAt          DateTime?        @map("publish_at")
   seoMeta            Json?            @map("seo_meta")
-  categories         Category[]       @relation("VideoCategories")
   episodes           Episode[]
   subtitles          VideoSubtitle[]
   createdAt          DateTime         @default(now()) @map("created_at")
@@ -440,6 +419,9 @@ model Category {
   isVisible   Boolean  @default(true) @map("is_visible")
   platforms   String[]
   appliesTo   String[] @map("applies_to")
+  code        String?  // Code danh mục (VTCPlay)
+  seoThumbnail String? @map("seo_thumbnail") // Ảnh thumbnail cho SEO
+  contentSort String   @default("created") @map("content_sort") // created | manual
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 

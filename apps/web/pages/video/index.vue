@@ -1,3 +1,3 @@
 <template>
-  <TabHomePage title="Video" page-title="Video - VTC ANY" :types="['video']" />
+  <TabHomePage title="Video" page-title="Video - VTC ANY" section="video" />
 </template>

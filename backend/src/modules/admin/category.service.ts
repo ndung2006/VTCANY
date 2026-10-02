@@ -4,7 +4,8 @@ import { PrismaService } from '../../prisma/prisma.service';
 
 // Danh mục (categories) — persist Prisma (bang categories), giu nguyen API shape.
 // Moi loai noi dung co danh muc rieng (theo mau VTCPlay CMS): truyen-hinh / phim /
-// video / short. FE hien thi rail theo tung danh muc cua tung loai.
+// video / short. CMS quan ly "khoi giao dien" (rails) thu cong theo tung muc;
+// FE hien thi rail theo khoi da cau hinh.
 
 export interface Category {
   id: string;
@@ -19,6 +20,9 @@ export interface Category {
   isVisible: boolean;
   platforms: string[];
   appliesTo: string[];
+  code?: string;
+  seoThumbnail?: string;
+  contentSort: string; // created | manual
   createdAt: string;
   updatedAt: string;
 }
@@ -34,6 +38,9 @@ export interface CreateCategoryDto {
   isVisible?: boolean;
   platforms?: string[];
   appliesTo?: string[];
+  code?: string;
+  seoThumbnail?: string;
+  contentSort?: string;
 }
 
 function generatePublicId(): string {
@@ -52,10 +59,10 @@ export function slugify(input: string): string {
     .replace(/-{2,}/g, '-');
 }
 
-// Danh muc mac dinh theo dung CMS VTCPlay (Quan ly danh muc: Truyen hinh / Phim / Video / Short).
-// Mot so ten trung nhau giua cac loai (Tin tuc, Check in Viet Nam) -> slug rieng theo loai.
-const SEED: Array<{ name: string; slug?: string; appliesTo: string[] }> = [
-  // Phim
+// Danh muc mac dinh theo dung CMS VTCPlay (Quan ly danh muc: Phim / Video / Short / Truyen hinh).
+// Ten trung nhau giua cac loai -> slug rieng theo loai. 2 danh muc Short mac dinh An.
+const SEED: Array<{ name: string; slug?: string; appliesTo: string[]; isVisible?: boolean }> = [
+  // Phim (8)
   { name: 'Phim THVL', appliesTo: ['phim'] },
   { name: 'Phim chiếu rạp', appliesTo: ['phim'] },
   { name: 'Phim mới', appliesTo: ['phim'] },
@@ -64,7 +71,7 @@ const SEED: Array<{ name: string; slug?: string; appliesTo: string[] }> = [
   { name: 'Phim SCTV', appliesTo: ['phim'] },
   { name: 'Phim lẻ', appliesTo: ['phim'] },
   { name: 'Phim Bộ', appliesTo: ['phim'] },
-  // Video
+  // Video (16)
   { name: 'World Cup 2026 - Chào buổi sáng', appliesTo: ['video'] },
   { name: 'KICK - OFF Thể thao', appliesTo: ['video'] },
   { name: 'Tin thể thao trong nước', appliesTo: ['video'] },
@@ -73,16 +80,27 @@ const SEED: Array<{ name: string; slug?: string; appliesTo: string[] }> = [
   { name: 'Bản tin dự báo thời tiết', appliesTo: ['video'] },
   { name: 'Tin tức ANTV', appliesTo: ['video'] },
   { name: 'Hoạt hình', appliesTo: ['video'] },
-  // Short
+  { name: 'Gameshow', slug: 'gameshow-video', appliesTo: ['video'] },
+  { name: 'Ca nhạc', appliesTo: ['video'] },
+  { name: 'Tin thể thao Quốc tế', appliesTo: ['video'] },
+  { name: 'Trailer phim', appliesTo: ['video'] },
+  { name: 'Truyền hình số vệ tinh VTC', appliesTo: ['video'] },
+  { name: 'Thời trang', slug: 'thoi-trang-video', appliesTo: ['video'] },
+  { name: 'Khám phá thiên nhiên', appliesTo: ['video'] },
+  { name: 'Tỉnh thành', appliesTo: ['video'] },
+  // Short (11)
   { name: 'Phim Ngắn', appliesTo: ['short'] },
   { name: 'Check in Việt Nam', slug: 'check-in-viet-nam-short', appliesTo: ['short'] },
   { name: 'Short videos', appliesTo: ['short'] },
-  { name: 'Thời trang', appliesTo: ['short'] },
+  { name: 'Thời trang', slug: 'thoi-trang-short', appliesTo: ['short'], isVisible: false },
   { name: 'Lịch sử', appliesTo: ['short'] },
   { name: 'Tin tức', slug: 'tin-tuc-short', appliesTo: ['short'] },
   { name: 'Kỹ năng số', appliesTo: ['short'] },
   { name: 'Động vật', appliesTo: ['short'] },
-  // Truyen hinh
+  { name: 'Quê hương bình yên', appliesTo: ['short'] },
+  { name: 'Ẩm thực', appliesTo: ['short'] },
+  { name: 'Hài hước', appliesTo: ['short'], isVisible: false },
+  // Truyen hinh (2)
   { name: 'Tin tức', slug: 'tin-tuc-truyen-hinh', appliesTo: ['truyen-hinh'] },
   { name: 'Thể thao', appliesTo: ['truyen-hinh'] },
 ];
@@ -101,6 +119,9 @@ function toCategory(r: any): Category {
     isVisible: r.isVisible !== false,
     platforms: r.platforms ?? ['WEB'],
     appliesTo: r.appliesTo ?? [],
+    code: r.code ?? undefined,
+    seoThumbnail: r.seoThumbnail ?? undefined,
+    contentSort: r.contentSort ?? 'created',
     createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : r.createdAt,
     updatedAt: r.updatedAt instanceof Date ? r.updatedAt.toISOString() : r.updatedAt,
   };
@@ -112,9 +133,8 @@ export class CategoryService implements OnModuleInit {
 
   constructor(private prisma: PrismaService) {}
 
-  // NOTE: @prisma/client trong VM chua duoc regenerate cho model Category
-  // (can mang de tai Prisma engine; Docker build tren production tu chay
-  // `prisma generate` day du). Dung cast tam co chu thich.
+  // NOTE: @prisma/client trong VM chua duoc regenerate (can mang de tai Prisma engine;
+  // Docker build tren production tu chay `prisma generate` day du). Dung cast tam.
   private get db(): any { return (this.prisma as any).category; }
 
   async onModuleInit(): Promise<void> {
@@ -124,7 +144,14 @@ export class CategoryService implements OnModuleInit {
         let order = 0;
         for (const s of SEED) {
           order += 1;
-          await this.create({ name: s.name, slug: s.slug, appliesTo: s.appliesTo, sortOrder: order, platforms: ['WEB'] });
+          await this.create({
+            name: s.name,
+            slug: s.slug,
+            appliesTo: s.appliesTo,
+            sortOrder: order,
+            platforms: ['WEB'],
+            isVisible: s.isVisible !== false,
+          });
         }
         this.logger.log(`Da seed ${SEED.length} danh muc mac dinh theo VTCPlay.`);
       }
@@ -154,6 +181,12 @@ export class CategoryService implements OnModuleInit {
     return toCategory(r);
   }
 
+  async getByPublicId(publicId: string): Promise<Category> {
+    const r = await this.db.findUnique({ where: { publicId } });
+    if (!r) throw new Error('not found');
+    return toCategory(r);
+  }
+
   async create(dto: CreateCategoryDto): Promise<Category> {
     if (!dto.name?.trim()) throw new Error('name is required');
     const slug = (dto.slug?.trim() || slugify(dto.name)) || `danh-muc-${Date.now().toString(36)}`;
@@ -175,9 +208,13 @@ export class CategoryService implements OnModuleInit {
         thumbnail: dto.thumbnail,
         description: dto.description,
         sortOrder: dto.sortOrder ?? 0,
-        isVisible: dto.isVisible ?? true,
+        // VTCPlay: mac dinh An khi them moi danh muc
+        isVisible: dto.isVisible ?? false,
         platforms: dto.platforms ?? ['WEB'],
         appliesTo: dto.appliesTo ?? ['phim', 'video'],
+        code: dto.code,
+        seoThumbnail: dto.seoThumbnail,
+        contentSort: dto.contentSort ?? 'created',
         createdAt: now,
         updatedAt: now,
       },
@@ -213,6 +250,9 @@ export class CategoryService implements OnModuleInit {
     if (dto.isVisible !== undefined) patch.isVisible = dto.isVisible;
     if (dto.platforms !== undefined) patch.platforms = dto.platforms;
     if (dto.appliesTo !== undefined) patch.appliesTo = dto.appliesTo;
+    if (dto.code !== undefined) patch.code = dto.code;
+    if (dto.seoThumbnail !== undefined) patch.seoThumbnail = dto.seoThumbnail;
+    if (dto.contentSort !== undefined) patch.contentSort = dto.contentSort;
     patch.updatedAt = new Date();
     const r = await this.db.update({ where: { id }, data: patch });
     return toCategory(r);

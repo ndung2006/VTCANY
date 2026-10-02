@@ -230,6 +230,44 @@ export function toPublicItem(item: any): any {
   };
 }
 
+// Khoi giao dien mac dinh theo tung muc — giong cac rail dang ON tren VTCPlay.
+// section: home | tv | movies | video | short | entertainment
+const RAIL_SEED: Array<{
+  section: string; title: string; contentType: string; categorySlug?: string; sortOrder: number;
+}> = [
+  // Trang chu
+  { section: 'home', title: 'Kênh truyền hình', contentType: 'tv', sortOrder: 1 },
+  { section: 'home', title: 'KICK-OFF THỂ THAO', contentType: 'video', categorySlug: 'kick-off-the-thao', sortOrder: 2 },
+  { section: 'home', title: 'World Cup 2026 - Chào buổi sáng', contentType: 'video', categorySlug: 'world-cup-2026-chao-buoi-sang', sortOrder: 3 },
+  { section: 'home', title: 'Check in Việt Nam', contentType: 'video', categorySlug: 'check-in-viet-nam-video', sortOrder: 4 },
+  { section: 'home', title: 'Phim bộ', contentType: 'movie', categorySlug: 'phim-bo', sortOrder: 5 },
+  { section: 'home', title: 'Short videos', contentType: 'short', categorySlug: 'short-videos', sortOrder: 6 },
+  { section: 'home', title: 'Phim chiếu rạp', contentType: 'movie', categorySlug: 'phim-chieu-rap', sortOrder: 7 },
+  { section: 'home', title: 'Ca nhạc', contentType: 'video', categorySlug: 'ca-nhac', sortOrder: 8 },
+  // Phim
+  { section: 'movies', title: 'Phim Bộ', contentType: 'movie', categorySlug: 'phim-bo', sortOrder: 1 },
+  { section: 'movies', title: 'Phim hoạt hình', contentType: 'movie', categorySlug: 'phim-hoat-hinh', sortOrder: 2 },
+  { section: 'movies', title: 'Phim SCTV9', contentType: 'movie', categorySlug: 'phim-sctv', sortOrder: 3 },
+  { section: 'movies', title: 'Gameshow', contentType: 'movie', categorySlug: 'gameshow', sortOrder: 4 },
+  { section: 'movies', title: 'Phim lẻ', contentType: 'movie', categorySlug: 'phim-le', sortOrder: 5 },
+  // Video
+  { section: 'video', title: 'KICK - OFF Thể thao', contentType: 'video', categorySlug: 'kick-off-the-thao', sortOrder: 1 },
+  { section: 'video', title: 'Check in Việt Nam', contentType: 'video', categorySlug: 'check-in-viet-nam-video', sortOrder: 2 },
+  { section: 'video', title: 'Tin thể thao trong nước', contentType: 'video', categorySlug: 'tin-the-thao-trong-nuoc', sortOrder: 3 },
+  { section: 'video', title: 'Ca nhạc', contentType: 'video', categorySlug: 'ca-nhac', sortOrder: 4 },
+  { section: 'video', title: 'Tin thể thao Quốc tế', contentType: 'video', categorySlug: 'tin-the-thao-quoc-te', sortOrder: 5 },
+  // Short
+  { section: 'short', title: 'Check in Việt Nam', contentType: 'short', categorySlug: 'check-in-viet-nam-short', sortOrder: 1 },
+  { section: 'short', title: 'Phim ngắn', contentType: 'short', categorySlug: 'phim-ngan', sortOrder: 2 },
+  { section: 'short', title: 'Ẩm thực', contentType: 'short', categorySlug: 'am-thuc', sortOrder: 3 },
+  { section: 'short', title: 'Kỹ năng số', contentType: 'short', categorySlug: 'ky-nang-so', sortOrder: 4 },
+  { section: 'short', title: 'Động vật', contentType: 'short', categorySlug: 'dong-vat', sortOrder: 5 },
+  // Giai tri
+  { section: 'entertainment', title: 'KICK - OFF Thể thao', contentType: 'video', categorySlug: 'kick-off-the-thao', sortOrder: 1 },
+  { section: 'entertainment', title: 'Ca nhạc', contentType: 'video', categorySlug: 'ca-nhac', sortOrder: 2 },
+  { section: 'entertainment', title: 'Gameshow', contentType: 'video', categorySlug: 'gameshow-video', sortOrder: 3 },
+];
+
 @Injectable()
 export class CatalogService implements OnModuleInit {
   private readonly logger = new Logger(CatalogService.name);
@@ -257,6 +295,38 @@ export class CatalogService implements OnModuleInit {
       }
     } catch (e) {
       this.logger.warn(`Bo qua seed plans (DB chua san sang?): ${(e as Error).message}`);
+    }
+    // Seed khoi giao dien (rails) mac dinh theo tung muc — giong cac rail dang ON
+    // tren VTCPlay. Chi khi chua co rail nao. categorySlug duoc resolve sang
+    // categoryId luc seed (neu danh muc chua co thi endpoint tu resolve theo slug).
+    try {
+      const n = await this.prisma.catalogItem.count({ where: { entity: 'rails' } });
+      if (n === 0) {
+        const catDb: any = (this.prisma as any).category;
+        for (const s of RAIL_SEED) {
+          let categoryId: string | undefined;
+          if (s.categorySlug && catDb) {
+            try {
+              const c = await catDb.findUnique({ where: { slug: s.categorySlug } });
+              if (c) categoryId = c.id;
+            } catch { /* bo qua */ }
+          }
+          await this.create('rails', {
+            title: s.title,
+            section: s.section,
+            platform: 'web',
+            contentType: s.contentType,
+            categoryId,
+            categorySlug: s.categorySlug,
+            sortOrder: s.sortOrder,
+            style: 'Mặc định',
+            isVisible: true,
+          });
+        }
+        this.logger.log(`Da seed ${RAIL_SEED.length} khoi giao dien mac dinh.`);
+      }
+    } catch (e) {
+      this.logger.warn(`Bo qua seed rails (DB chua san sang?): ${(e as Error).message}`);
     }
   }
 

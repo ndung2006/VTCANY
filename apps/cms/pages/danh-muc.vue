@@ -52,29 +52,38 @@
       </DataTable>
     </div>
 
-    <Dialog v-model:visible="dlg" modal :header="editing ? 'Sửa danh mục' : 'Thêm danh mục'" class="w-full max-w-xl">
-      <div class="grid grid-cols-2 gap-3">
-        <div class="col-span-2"><label class="field-label">Tên *</label><InputText v-model="form.name" class="w-full" /></div>
-        <div class="col-span-2">
-          <label class="field-label">Slug</label>
-          <InputText v-model="form.slug" class="w-full" placeholder="tự sinh từ tên" />
-          <small class="text-neutral-500">Preview: {{ slugPreview }}</small>
+    <Dialog v-model:visible="dlg" modal :header="editing ? 'Cập nhật danh mục' : 'Thêm danh mục'" class="w-full max-w-xl">
+      <div class="flex flex-col gap-3">
+        <div><label class="field-label">Tiêu đề *</label><InputText v-model="form.name" class="w-full" /></div>
+        <div><label class="field-label">Code</label><InputText v-model="form.code" class="w-full" /></div>
+        <div>
+          <label class="field-label">Ảnh thumbnail cho SEO</label>
+          <ImagePicker v-model="form.seoThumbnail" ratio="16/9" />
         </div>
-        <div><label class="field-label">Danh mục cha</label>
-          <Dropdown v-model="form.parentId" :options="parentOpts" option-label="name" option-value="id"
-            placeholder="— Không có —" class="w-full" show-clear />
+        <div>
+          <label class="field-label">Nền tảng</label>
+          <MultiSelect v-model="form.platforms" :options="platformOpts" class="w-full" />
         </div>
-        <div><label class="field-label">Thứ tự</label><InputNumber v-model="form.sortOrder" class="w-full" /></div>
-        <div><label class="field-label">Icon</label><InputText v-model="form.icon" class="w-full" placeholder="pi pi-..." /></div>
-        <div><label class="field-label">Thumbnail URL</label><InputText v-model="form.thumbnail" class="w-full" /></div>
-        <div class="col-span-2"><label class="field-label">Mô tả</label><Textarea v-model="form.description" rows="2" class="w-full" /></div>
-        <div class="flex items-center gap-2"><InputSwitch v-model="form.isVisible" input-id="vis" /><label for="vis">Hiển thị</label></div>
-        <div />
-        <div><label class="field-label">Platforms</label><MultiSelect v-model="form.platforms" :options="platformOpts" class="w-full" /></div>
-        <div><label class="field-label">Áp dụng cho</label><MultiSelect v-model="form.appliesTo" :options="appliesOpts" option-label="label" option-value="value" class="w-full" /></div>
+        <div>
+          <label class="field-label">Hiển thị nội dung theo</label>
+          <Dropdown v-model="form.contentSort" :options="contentSortOpts" option-label="label" option-value="value" class="w-full" />
+        </div>
+        <div>
+          <label class="field-label">Trạng thái hiển thị</label>
+          <div class="flex gap-4">
+            <div class="flex items-center gap-2">
+              <RadioButton v-model="form.isVisible" input-id="vis1" :value="true" />
+              <label for="vis1">Hiển thị</label>
+            </div>
+            <div class="flex items-center gap-2">
+              <RadioButton v-model="form.isVisible" input-id="vis2" :value="false" />
+              <label for="vis2">Ẩn</label>
+            </div>
+          </div>
+        </div>
       </div>
       <template #footer>
-        <Button label="Hủy" text @click="dlg = false" />
+        <Button label="Đóng" text @click="dlg = false" />
         <Button label="Lưu" :loading="saving" :disabled="!form.name.trim()" @click="save" />
       </template>
     </Dialog>
@@ -106,19 +115,18 @@ const tabs = [
   { key: 'video', label: 'Video' },
   { key: 'short', label: 'Short' },
 ];
-const platformOpts = ['WEB', 'MOBILE', 'TV'];
-const appliesOpts = [
-  { label: 'Truyền hình', value: 'truyen-hinh' },
-  { label: 'Phim', value: 'phim' },
-  { label: 'Video', value: 'video' },
-  { label: 'Short', value: 'short' },
-  { label: 'Giải trí', value: 'giai-tri' },
+const platformOpts = ['Android Mobile', 'IOS', 'Web'];
+const contentSortOpts = [
+  { label: 'Thời gian tạo', value: 'created' },
+  { label: 'Thứ tự sắp xếp', value: 'manual' },
 ];
 
-const blank = () => ({ name: '', slug: '', parentId: null, icon: '', thumbnail: '', description: '', sortOrder: 0, isVisible: true, platforms: ['WEB'], appliesTo: [activeTab.value] });
+const blank = () => ({
+  name: '', code: '', seoThumbnail: '', platforms: ['Web'],
+  contentSort: 'created', isVisible: false, // VTCPlay: mac dinh An khi them
+  appliesTo: [activeTab.value],
+});
 const form = ref(blank());
-const parentOpts = computed(() => cats.value.filter((c) => !editing.value || c.id !== editing.value.id));
-const slugPreview = computed(() => form.value.slug || slugify(form.value.name));
 
 const filtered = computed(() => {
   const key = activeTab.value;
@@ -130,10 +138,6 @@ const filtered = computed(() => {
   });
 });
 
-function slugify(s: string) {
-  return (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D')
-    .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
-}
 function fmtDateTime(v: string) {
   if (!v) return '—';
   const d = new Date(v);
@@ -143,9 +147,6 @@ function fmtDateTime(v: string) {
   const hh = String(d.getHours()).padStart(2, '0');
   const mi = String(d.getMinutes()).padStart(2, '0');
   return `${dd}/${mm}/${d.getFullYear()} ${hh}:${mi}`;
-}
-function parentName(id: string | null) {
-  return cats.value.find((c) => c.id === id)?.name || '—';
 }
 
 async function load() {
@@ -157,12 +158,18 @@ async function load() {
 function openAdd() { editing.value = null; form.value = blank(); dlg.value = true; }
 function openEdit(c: any) {
   editing.value = c;
-  form.value = { name: c.name || '', slug: c.slug || '', parentId: c.parentId ?? null, icon: c.icon || '', thumbnail: c.thumbnail || '', description: c.description || '', sortOrder: c.sortOrder ?? 0, isVisible: c.isVisible !== false, platforms: c.platforms || ['WEB'], appliesTo: c.appliesTo || [] };
+  form.value = {
+    name: c.name || '', code: c.code || '', seoThumbnail: c.seoThumbnail || '',
+    platforms: c.platforms?.length ? c.platforms : ['Web'],
+    contentSort: c.contentSort || 'created',
+    isVisible: c.isVisible !== false,
+    appliesTo: c.appliesTo?.length ? c.appliesTo : [activeTab.value],
+  };
   dlg.value = true;
 }
 async function save() {
   saving.value = true;
-  const body: any = { ...form.value, slug: form.value.slug || undefined };
+  const body: any = { ...form.value };
   try {
     if (editing.value) await api.patch(`/admin/categories/${editing.value.id}`, body);
     else await api.post('/admin/categories', body);

@@ -1,3 +1,3 @@
 <template>
-  <TabHomePage title="Short" page-title="Short - VTC ANY" :types="['short']" />
+  <TabHomePage title="Short" page-title="Short - VTC ANY" section="short" />
 </template>

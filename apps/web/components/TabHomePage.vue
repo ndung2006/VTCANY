@@ -8,9 +8,12 @@
       <Skeleton width="100%" height="10rem" border-radius="0.75rem" />
     </div>
 
-    <template v-else-if="heroItems.length || catRails?.length">
+    <template v-else-if="heroItems.length || rails?.length">
       <HeroCarousel :items="heroItems" />
-      <RailCarousel v-for="rail in catRails" :key="rail.order" :block="rail" />
+      <template v-for="rail in rails" :key="rail.id">
+        <ChannelStrip v-if="rail.contentType === 'tv'" :title="rail.title" />
+        <RailCarousel v-else :block="rail.block" />
+      </template>
     </template>
 
     <p v-else class="mt-4 text-neutral-400">Chưa có nội dung cho mục này.</p>
@@ -21,35 +24,56 @@
 import type { HeroItem } from '@/components/HeroCarousel.vue';
 import type { RailBlock, RailItem } from '@/components/RailCarousel.vue';
 
-// Trang tab kieu vtcplay.vn (/phim, /video, /short):
-// hero banner + rail RIENG THEO TUNG DANH MUC cua loai noi dung do
-// (vd: /short -> rail "Check in Viet Nam", "Phim ngan"...).
+// Trang tab kieu vtcplay.vn (/phim, /video, /short, trang chu):
+// hero banner + rail theo "khoi giao dien" do CMS cau hinh thu cong
+// (HIEN THI > Giao dien) — moi khoi tro den mot danh muc.
 const props = defineProps<{
   title: string;
   pageTitle: string;
-  types: string[];
+  section: 'home' | 'tv' | 'movies' | 'video' | 'short' | 'entertainment';
 }>();
 
 useHead({ title: props.pageTitle });
 
 const config = useRuntimeConfig();
 
-const KIND = {
-  phim: { catType: 'phim', endpoint: '/catalog/movies', cardAspect: '3/4', itemType: 'phim' },
-  video: { catType: 'video', endpoint: '/catalog/videos', cardAspect: '3/2', itemType: 'video' },
-  short: { catType: 'short', endpoint: '/catalog/shorts', cardAspect: '9/16', itemType: 'short' },
-} as const;
-type KindKey = keyof typeof KIND;
-const kind = KIND[(props.types[0] as KindKey) ?? 'phim'] ?? KIND.phim;
+const ASPECT: Record<string, string> = {
+  movie: '3/4',
+  video: '3/2',
+  short: '9/16',
+  event: '3/2',
+  tv: '3/2',
+};
+const ITEM_TYPE: Record<string, string> = {
+  movie: 'phim',
+  video: 'video',
+  short: 'short',
+  event: 'event',
+};
 
 interface PublicItem {
-  id: string;
   public_id: string;
   slug: string;
   title: string;
   thumbnail?: string;
   poster?: string;
   planId?: string | null;
+}
+
+interface ApiRail {
+  id: string;
+  title: string;
+  contentType?: string;
+  sortOrder: number;
+  category?: { id: string; public_id: string; name: string; slug: string } | null;
+  items: PublicItem[];
+}
+
+interface Rail {
+  id: string;
+  title: string;
+  contentType?: string;
+  block: RailBlock;
 }
 
 // Hero giu tu layout/home (do CMS cau hinh).
@@ -63,33 +87,48 @@ const heroItems = computed(() => {
   return ((h?.items ?? []) as unknown) as HeroItem[];
 });
 
-// Rail theo tung danh muc: lay danh muc cua loai -> moi danh muc lay items.
-const { data: catRails, pending } = await useAsyncData(`tab-rails-${kind.catType}`, async () => {
-  const catRes: any = await $fetch('/catalog/categories', {
+// Rail theo khoi giao dien CMS.
+const { data: rails, pending } = await useAsyncData(`tab-rails-${props.section}`, async () => {
+  const res: any = await $fetch('/catalog/rails', {
     baseURL: config.public.apiBase as string,
-    query: { type: kind.catType },
+    query: { section: props.section, platform: 'web' },
   });
-  const cats: Array<{ id: string; name: string }> = catRes?.data ?? [];
-  const rails: RailBlock[] = [];
-  for (const [i, c] of cats.entries()) {
-    const itemRes: any = await $fetch(kind.endpoint, {
-      baseURL: config.public.apiBase as string,
-      query: { categoryId: c.id, limit: 24 },
-    });
-    const items: RailItem[] = (itemRes?.data ?? []).map((it: PublicItem) => ({
-      id: it.id,
+  const apiRails: ApiRail[] = res?.data ?? [];
+  const out: Rail[] = [];
+  for (const r of apiRails) {
+    if (r.contentType === 'tv') {
+      out.push({ id: r.id, title: r.title, contentType: 'tv', block: {} as RailBlock });
+      continue;
+    }
+    const ct = (r.contentType || 'movie').toLowerCase();
+    const aspect = ASPECT[ct] ?? '3/2';
+    const itemType = ITEM_TYPE[ct] ?? 'phim';
+    const items: RailItem[] = (r.items ?? []).map((it: PublicItem) => ({
+      id: it.public_id,
       public_id: it.public_id,
       slug: it.slug,
       title: it.title,
       thumbnail: it.poster || it.thumbnail || '',
-      aspect: kind.cardAspect,
+      aspect,
       is_premium: !!it.planId,
-      type: kind.itemType,
+      type: itemType,
     }));
-    if (items.length) {
-      rails.push({ order: i, type: 'HORIZONTAL_LIST', title: c.name, card_aspect: kind.cardAspect, items });
-    }
+    if (!items.length) continue; // khong hien thi rail rong (giong VTCPlay)
+    out.push({
+      id: r.id,
+      title: r.title,
+      contentType: ct,
+      block: {
+        order: r.sortOrder,
+        type: 'HORIZONTAL_LIST',
+        title: r.title,
+        // Bam tieu de rail -> trang chi tiet danh muc (giong vtcplay.vn/danh-muc/<slug>-<id>)
+        target_url: r.category ? `/danh-muc/${r.category.slug}-${r.category.public_id}` : undefined,
+        card_aspect: aspect,
+        items,
+      },
+    });
   }
-  return rails;
+  return out;
 });
 </script>

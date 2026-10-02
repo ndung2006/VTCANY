@@ -31,6 +31,7 @@ export function parseSlugId(param: string): { slug: string; publicId: string } {
 
 // URL chi tiết nội dung theo loại (giống quy ước vtcplay.vn: /phim|video|short/{slug}-{24hex}).
 export function contentUrl(item: { type?: string; slug: string; public_id: string }): string {
-  const kind = item.type === 'short' ? 'short' : item.type === 'video' ? 'video' : 'phim';
+  const kind =
+    item.type === 'short' ? 'short' : item.type === 'video' ? 'video' : item.type === 'event' ? 'su-kien' : 'phim';
   return `/${kind}/${item.slug}-${item.public_id}`;
 }
