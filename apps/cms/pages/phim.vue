@@ -51,7 +51,10 @@
         <div><label class="field-label">Gói cước</label>
           <Dropdown v-model="form.planId" :options="plans" option-label="name" option-value="id" placeholder="—" show-clear class="w-full" />
         </div>
-        <div><label class="field-label">Danh mục (IDs, cách nhau dấu phẩy)</label><InputText v-model="form.categoryIdsText" class="w-full" /></div>
+        <div><label class="field-label">Danh mục</label>
+          <MultiSelect v-model="form.categoryIds" :options="typeCategories('phim')" option-label="name" option-value="id" filter display="chip"
+            :loading="loadingCats" placeholder="Chọn danh mục" class="w-full" />
+        </div>
         <div><label class="field-label">Thể loại (IDs, cách nhau dấu phẩy)</label><InputText v-model="form.genreIdsText" class="w-full" /></div>
         <div><label class="field-label">Giới hạn độ tuổi</label><InputText v-model="form.ageLimit" class="w-full" placeholder="vd: 13+" /></div>
         <div><label class="field-label">Ngày xuất bản</label><Calendar v-model="form.publishedAt" date-format="yy-mm-dd" show-icon class="w-full" /></div>
@@ -179,6 +182,15 @@ const epDistOptions = [
 ];
 
 const plans = ref<any[]>([]);
+const categories = ref<any[]>([]);
+const loadingCats = ref(false);
+// Chi hien danh muc ap dung cho Phim (appliesTo rong = hien het, tuong thich du lieu cu).
+function typeCategories(kind: string) {
+  return categories.value.filter((c) => {
+    const a = c.appliesTo || [];
+    return !a.length || a.includes(kind);
+  });
+}
 const { files: vodFiles, loadingFiles, loadDoneFiles, fileLabel } = useVodFiles();
 const vodFileOptions = computed(() => vodFiles.value.map((f) => ({ id: f.id, label: fileLabel(f), posterUrl: f.posterUrl || '' })));
 const dlg = ref(false);
@@ -186,7 +198,7 @@ const editing = ref<any>(null);
 const saving = ref(false);
 const form = ref({
   title: '', originalTitle: '', description: '', type: 'single', planId: '',
-  categoryIdsText: '', genreIdsText: '', ageLimit: '', publishedAt: null as any,
+  categoryIds: [] as string[], genreIdsText: '', ageLimit: '', publishedAt: null as any,
   duration: '', releaseYear: null as any, distribution: 'free', price: null as any,
   posterUrl: '', thumbnailUrl: '', hasSubtitle: false, hasDubbing: false, isVisible: true,
 });
@@ -211,14 +223,14 @@ function toDate(v: any) { return v ? new Date(v) : null; }
 
 function openAdd() {
   editing.value = null;
-  form.value = { title: '', originalTitle: '', description: '', type: 'single', planId: '', categoryIdsText: '', genreIdsText: '', ageLimit: '', publishedAt: null, duration: '', releaseYear: null, distribution: 'free', price: null, posterUrl: '', thumbnailUrl: '', hasSubtitle: false, hasDubbing: false, isVisible: true };
+  form.value = { title: '', originalTitle: '', description: '', type: 'single', planId: '', categoryIds: [], genreIdsText: '', ageLimit: '', publishedAt: null, duration: '', releaseYear: null, distribution: 'free', price: null, posterUrl: '', thumbnailUrl: '', hasSubtitle: false, hasDubbing: false, isVisible: true };
   dlg.value = true;
 }
 function openEdit(m: any) {
   editing.value = m;
   form.value = {
     title: m.title || '', originalTitle: m.originalTitle || '', description: m.description || '',
-    type: m.type || 'single', planId: m.planId || '', categoryIdsText: idsToText(m.categoryIds),
+    type: m.type || 'single', planId: m.planId || '', categoryIds: m.categoryIds || [],
     genreIdsText: idsToText(m.genreIds), ageLimit: m.ageLimit || '', publishedAt: toDate(m.publishedAt),
     duration: m.duration || '', releaseYear: m.releaseYear ?? null, distribution: m.distribution || 'free',
     price: m.price ?? null, posterUrl: m.posterUrl || '', thumbnailUrl: m.thumbnailUrl || '',
@@ -232,7 +244,7 @@ async function save() {
     title: form.value.title, originalTitle: form.value.originalTitle || undefined,
     description: form.value.description || undefined, type: form.value.type,
     planId: form.value.planId || undefined,
-    categoryIds: textToIds(form.value.categoryIdsText), genreIds: textToIds(form.value.genreIdsText),
+    categoryIds: form.value.categoryIds, genreIds: textToIds(form.value.genreIdsText),
     ageLimit: form.value.ageLimit || undefined, publishedAt: toIso(form.value.publishedAt) || undefined,
     duration: form.value.duration || undefined, releaseYear: form.value.releaseYear ?? undefined,
     distribution: form.value.distribution, price: form.value.price ?? undefined,
@@ -373,5 +385,11 @@ onMounted(async () => {
     const r = await api.get<any>('/admin/catalog/plans', { page: 1, limit: 100 });
     plans.value = r.data || [];
   } catch { /* bỏ qua */ }
+  loadingCats.value = true;
+  try {
+    const r = await api.get<any>('/admin/categories');
+    categories.value = r.data || [];
+  } catch { categories.value = []; }
+  finally { loadingCats.value = false; }
 });
 </script>

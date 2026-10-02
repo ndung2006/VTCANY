@@ -46,7 +46,7 @@
           <div><label class="field-label">Tên (bắt buộc)</label><InputText v-model="form.title" class="w-full" /></div>
           <div><label class="field-label">Mô tả</label><Textarea v-model="form.description" rows="5" class="w-full" /></div>
           <div><label class="field-label">Danh mục</label>
-            <MultiSelect v-model="form.categoryIds" :options="categories" option-label="name" option-value="id" filter display="chip"
+            <MultiSelect v-model="form.categoryIds" :options="typeCategories('video')" option-label="name" option-value="id" filter display="chip"
               :loading="loadingCats" placeholder="Chọn danh mục" class="w-full" />
           </div>
           <div><label class="field-label">Danh sách phát</label>
@@ -170,6 +170,13 @@ const platformOptions = ['Website', 'Mobile App', 'TV App'];
 function categoryNames(ids: any): string {
   if (!Array.isArray(ids) || !ids.length) return '—';
   return ids.map((id) => categories.value.find((c) => c.id === id)?.name || id).join(', ');
+}
+// Chi hien danh muc ap dung cho loai noi dung nay (appliesTo rong = hien het, tuong thich du lieu cu).
+function typeCategories(kind: string) {
+  return categories.value.filter((c) => {
+    const a = c.appliesTo || [];
+    return !a.length || a.includes(kind);
+  });
 }
 function planName(id: any): string { return plans.value.find((p) => p.id === id)?.name || 'Có gói'; }
 

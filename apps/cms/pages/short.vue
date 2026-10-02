@@ -45,7 +45,7 @@
           <div><label class="field-label">Tên (bắt buộc)</label><InputText v-model="form.title" class="w-full" /></div>
           <div><label class="field-label">Mô tả</label><Textarea v-model="form.description" rows="4" class="w-full" /></div>
           <div><label class="field-label">Danh mục</label>
-            <Dropdown v-model="form.categoryId" :options="categories" option-label="name" option-value="id" show-clear filter
+            <Dropdown v-model="form.categoryId" :options="typeCategories('short')" option-label="name" option-value="id" show-clear filter
               :loading="loadingCats" placeholder="Chọn danh mục" class="w-full" />
           </div>
           <div><label class="field-label">Gói cước</label>
@@ -154,6 +154,13 @@ const ageOptions = ['P - Phù hợp mọi độ tuổi', 'T13 - 13 tuổi trở 
 const platformOptions = ['Website', 'Mobile App', 'TV App'];
 
 function categoryName(id: any): string { return categories.value.find((c) => c.id === id)?.name || '—'; }
+// Chi hien danh muc ap dung cho loai noi dung nay (appliesTo rong = hien het, tuong thich du lieu cu).
+function typeCategories(kind: string) {
+  return categories.value.filter((c) => {
+    const a = c.appliesTo || [];
+    return !a.length || a.includes(kind);
+  });
+}
 function planName(id: any): string { return plans.value.find((p) => p.id === id)?.name || 'Có gói'; }
 
 async function loadRefs() {
