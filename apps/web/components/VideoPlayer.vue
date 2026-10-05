@@ -1,56 +1,127 @@
 <template>
   <div
-    class="relative w-full overflow-hidden rounded-xl bg-black"
+    ref="containerEl"
+    class="relative w-full select-none overflow-hidden rounded-xl bg-black"
     :class="aspect === '9/16' ? 'aspect-[9/16]' : 'aspect-video'"
+    @mousemove="pokeControls"
+    @mouseleave="hideOnLeave"
+    @click="togglePlay"
   >
     <video
       ref="videoEl"
       class="h-full w-full"
-      controls
       playsinline
       :poster="poster"
       @canplay="loading = false"
       @waiting="loading = true"
-      @playing="loading = false"
+      @playing="onPlaying"
+      @pause="onPause"
+      @ended="onEnded"
+      @timeupdate="onTimeUpdate"
+      @loadedmetadata="onLoadedMeta"
+      @volumechange="onVolumeChange"
+      @click.stop
     />
-    <!-- Chon chat luong thu cong (chi hien khi HLS co nhieu muc) -->
-    <div v-if="levels.length > 1" class="absolute right-2 top-2 z-10">
-      <button
-        type="button"
-        class="flex items-center gap-1.5 rounded-lg bg-black/70 px-2.5 py-1.5 text-xs font-semibold text-white backdrop-blur transition hover:bg-black/90"
-        @click.stop="menuOpen = !menuOpen"
-      >
-        <i class="pi pi-cog !text-xs" />
-        {{ qualityLabel }}
-      </button>
+
+    <div v-if="loading" class="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/40">
+      <i class="pi pi-spin pi-spinner !text-4xl text-white" />
+    </div>
+
+    <!-- Nut play lon giua man hinh khi pause -->
+    <button
+      v-if="!playing && !loading"
+      type="button"
+      class="absolute inset-0 m-auto flex h-16 w-16 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur transition hover:scale-105 hover:bg-black/80"
+      @click.stop="togglePlay"
+    >
+      <i class="pi pi-play !text-2xl" />
+    </button>
+
+    <!-- Thanh dieu khien kieu VTC Play -->
+    <div
+      class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/40 to-transparent px-3 pb-2.5 pt-10 transition-opacity duration-200"
+      :class="controlsVisible ? 'opacity-100' : 'pointer-events-none opacity-0'"
+      @click.stop
+    >
+      <!-- Progress -->
       <div
-        v-if="menuOpen"
-        class="absolute right-0 top-full mt-1 w-32 overflow-hidden rounded-lg bg-black/90 py-1 shadow-xl backdrop-blur"
+        ref="progressEl"
+        class="group/bar relative mb-2 h-1.5 cursor-pointer rounded-full bg-white/25"
+        @pointerdown="startScrub"
       >
-        <button
-          type="button"
-          class="flex w-full items-center justify-between px-3 py-2 text-left text-xs text-white transition hover:bg-white/10"
-          :class="{ 'font-bold text-emerald-400': manualLevel === -1 }"
-          @click="setQuality(-1)"
-        >
-          Tự động
-          <i v-if="manualLevel === -1" class="pi pi-check !text-xs" />
+        <div class="absolute inset-y-0 left-0 rounded-full bg-emerald-500" :style="{ width: progressPct + '%' }" />
+        <div
+          class="absolute top-1/2 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-emerald-500 opacity-0 shadow transition group-hover/bar:opacity-100"
+          :style="{ left: progressPct + '%' }"
+        />
+      </div>
+
+      <div class="flex items-center gap-1.5 text-white">
+        <button type="button" class="ctrl-btn" @click="togglePlay">
+          <i :class="playing ? 'pi pi-pause' : 'pi pi-play'" />
         </button>
-        <button
-          v-for="lv in levels"
-          :key="lv.index"
-          type="button"
-          class="flex w-full items-center justify-between px-3 py-2 text-left text-xs text-white transition hover:bg-white/10"
-          :class="{ 'font-bold text-emerald-400': manualLevel === lv.index }"
-          @click="setQuality(lv.index)"
-        >
-          {{ lv.height }}p
-          <i v-if="manualLevel === lv.index" class="pi pi-check !text-xs" />
+        <button type="button" class="ctrl-btn" title="Lùi 10 giây" @click="skip(-10)">
+          <i class="pi pi-replay" />
+        </button>
+        <button type="button" class="ctrl-btn" title="Tới 10 giây" @click="skip(10)">
+          <i class="pi pi-refresh" />
+        </button>
+        <button type="button" class="ctrl-btn" @click="toggleMute">
+          <i :class="muted || volume === 0 ? 'pi pi-volume-off' : volume < 0.5 ? 'pi pi-volume-down' : 'pi pi-volume-up'" />
+        </button>
+        <input
+          v-model.number="volume"
+          type="range"
+          min="0"
+          max="1"
+          step="0.05"
+          class="hidden h-1 w-20 accent-emerald-500 sm:block"
+          @input="onVolumeInput"
+        />
+        <span class="ml-1 text-xs tabular-nums text-white/90">{{ fmt(current) }} / {{ fmt(duration) }}</span>
+
+        <div class="flex-1" />
+
+        <!-- Chat luong (giong VTC Play): banh rang + menu popup -->
+        <div v-if="levels.length > 1" class="relative">
+          <button type="button" class="ctrl-btn" title="Chất lượng" @click.stop="qOpen = !qOpen">
+            <i class="pi pi-cog" />
+          </button>
+          <div
+            v-if="qOpen"
+            class="absolute bottom-full right-0 mb-2 w-36 overflow-hidden rounded-lg bg-black/95 py-1 shadow-2xl"
+            @click.stop
+          >
+            <button
+              type="button"
+              class="q-item"
+              :class="{ 'font-bold text-amber-400': manualLevel === -1 }"
+              @click="setQuality(-1)"
+            >
+              Tự động
+              <i v-if="manualLevel === -1" class="pi pi-check !text-xs" />
+            </button>
+            <button
+              v-for="lv in levels"
+              :key="lv.index"
+              type="button"
+              class="q-item"
+              :class="{ 'font-bold text-amber-400': manualLevel === lv.index }"
+              @click="setQuality(lv.index)"
+            >
+              {{ lv.height }}p
+              <i v-if="manualLevel === lv.index" class="pi pi-check !text-xs" />
+            </button>
+          </div>
+        </div>
+
+        <button v-if="canPip" type="button" class="ctrl-btn" title="Ảnh trong ảnh" @click="togglePip">
+          <i class="pi pi-clone" />
+        </button>
+        <button type="button" class="ctrl-btn" title="Toàn màn hình" @click="toggleFs">
+          <i :class="isFs ? 'pi pi-window-minimize' : 'pi pi-window-maximize'" />
         </button>
       </div>
-    </div>
-    <div v-if="loading" class="absolute inset-0 flex items-center justify-center bg-black/40">
-      <i class="pi pi-spin pi-spinner !text-4xl text-white" />
     </div>
   </div>
 </template>
@@ -62,72 +133,227 @@ import Hls from 'hls.js';
 const props = defineProps<{ src: string; poster?: string; aspect?: string }>();
 const emit = defineEmits<{ (e: 'ended'): void }>();
 
+const containerEl = ref<HTMLElement | null>(null);
 const videoEl = ref<HTMLVideoElement | null>(null);
-const loading = ref(true);
-let hls: Hls | null = null;
+const progressEl = ref<HTMLElement | null>(null);
 
-// Chat luong thu cong: levels tu hls.js (chi co khi HLS multibitrate).
-// manualLevel = -1 -> Tu dong (ABR); >= 0 -> khoa muc cu the.
+const loading = ref(true);
+const playing = ref(false);
+const current = ref(0);
+const duration = ref(0);
+const volume = ref(1);
+const muted = ref(false);
+const isFs = ref(false);
+const canPip = ref(false);
+const controlsVisible = ref(true);
+let hideTimer: ReturnType<typeof setTimeout> | undefined;
+let scrubbing = false;
+
+// Chat luong (hls.js): -1 = Tu dong (ABR).
+const hlsRef = ref<Hls | null>(null);
 const levels = ref<Array<{ index: number; height: number }>>([]);
 const manualLevel = ref(-1);
-const autoLevel = ref(-1);
-const menuOpen = ref(false);
-const qualityLabel = computed(() => {
-  if (manualLevel.value >= 0) {
-    const lv = levels.value.find((l) => l.index === manualLevel.value);
-    return lv ? `${lv.height}p` : 'Tự động';
-  }
-  return 'Tự động';
-});
+const qOpen = ref(false);
 
-function setQuality(i: number) {
-  manualLevel.value = i;
-  if (hls) hls.currentLevel = i; // -1 = ABR tu dong
-  menuOpen.value = false;
-}
+const progressPct = computed(() => (duration.value > 0 ? (current.value / duration.value) * 100 : 0));
 
-function onDocClick() {
-  menuOpen.value = false;
+function fmt(s: number): string {
+  const t = Math.max(0, Math.floor(s || 0));
+  const h = Math.floor(t / 3600);
+  const m = Math.floor((t % 3600) / 60);
+  const sec = t % 60;
+  const mm = h > 0 ? String(m).padStart(2, '0') : String(m);
+  return `${h > 0 ? h + ':' : ''}${mm}:${String(sec).padStart(2, '0')}`;
 }
 
 function currentTime(): number {
   return videoEl.value ? Math.floor(videoEl.value.currentTime) : 0;
 }
-
 defineExpose({ currentTime, videoEl });
+
+function togglePlay() {
+  const v = videoEl.value;
+  if (!v) return;
+  if (v.paused) v.play().catch(() => {});
+  else v.pause();
+}
+function skip(sec: number) {
+  const v = videoEl.value;
+  if (v && isFinite(v.duration)) v.currentTime = Math.min(Math.max(0, v.currentTime + sec), v.duration);
+}
+function toggleMute() {
+  const v = videoEl.value;
+  if (!v) return;
+  v.muted = !v.muted;
+  if (!v.muted && v.volume === 0) v.volume = 0.5;
+}
+function onVolumeInput() {
+  const v = videoEl.value;
+  if (!v) return;
+  v.volume = volume.value;
+  v.muted = volume.value === 0;
+}
+function toggleFs() {
+  const el = containerEl.value;
+  if (!el) return;
+  if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  else el.requestFullscreen().catch(() => {});
+}
+function togglePip() {
+  const v = videoEl.value as any;
+  if (!v) return;
+  if (document.pictureInPictureElement) (document as any).exitPictureInPicture().catch(() => {});
+  else if (v.requestPictureInPicture) v.requestPictureInPicture().catch(() => {});
+}
+
+// Tua: click + keo tren thanh progress.
+function seekFromEvent(e: PointerEvent) {
+  const bar = progressEl.value;
+  const v = videoEl.value;
+  if (!bar || !v || !isFinite(v.duration) || v.duration <= 0) return;
+  const r = bar.getBoundingClientRect();
+  const ratio = Math.min(Math.max((e.clientX - r.left) / r.width, 0), 1);
+  v.currentTime = ratio * v.duration;
+}
+function startScrub(e: PointerEvent) {
+  scrubbing = true;
+  seekFromEvent(e);
+  const move = (ev: PointerEvent) => scrubbing && seekFromEvent(ev);
+  const up = () => {
+    scrubbing = false;
+    window.removeEventListener('pointermove', move);
+    window.removeEventListener('pointerup', up);
+  };
+  window.addEventListener('pointermove', move);
+  window.addEventListener('pointerup', up);
+}
+
+// An/hien thanh dieu khien.
+function pokeControls() {
+  controlsVisible.value = true;
+  qOpen.value = false;
+  clearTimeout(hideTimer);
+  if (playing.value) {
+    hideTimer = setTimeout(() => {
+      controlsVisible.value = false;
+    }, 2800);
+  }
+}
+function hideOnLeave() {
+  if (playing.value && !scrubbing) {
+    clearTimeout(hideTimer);
+    controlsVisible.value = false;
+  }
+}
+
+// Chat luong.
+function setQuality(i: number) {
+  manualLevel.value = i;
+  const hls = hlsRef.value;
+  if (hls) hls.currentLevel = i; // -1 = ABR tu dong
+  qOpen.value = false;
+}
+
+// Su kien video.
+function onPlaying() {
+  loading.value = false;
+  playing.value = true;
+  pokeControls();
+}
+function onPause() {
+  playing.value = false;
+  controlsVisible.value = true;
+  clearTimeout(hideTimer);
+}
+function onEnded() {
+  playing.value = false;
+  controlsVisible.value = true;
+  emit('ended');
+}
+function onTimeUpdate() {
+  if (!scrubbing && videoEl.value) current.value = videoEl.value.currentTime;
+}
+function onLoadedMeta() {
+  if (videoEl.value && isFinite(videoEl.value.duration)) duration.value = videoEl.value.duration;
+}
+function onVolumeChange() {
+  const v = videoEl.value;
+  if (!v) return;
+  volume.value = v.volume;
+  muted.value = v.muted;
+}
+function onDocClick() {
+  qOpen.value = false;
+}
+function onFsChange() {
+  isFs.value = !!document.fullscreenElement;
+}
 
 onMounted(() => {
   const video = videoEl.value;
   if (!video || !props.src) {
-    loading = false;
+    loading.value = false;
     return;
   }
-  video.addEventListener('ended', () => emit('ended'));
+  canPip.value = typeof (video as any).requestPictureInPicture === 'function';
   if (video.canPlayType('application/vnd.apple.mpegurl')) {
-    video.src = props.src; // Safari: HLS native
+    video.src = props.src; // Safari: HLS native (khong co chon muc)
   } else if (Hls.isSupported()) {
-    hls = new Hls();
+    const hls = new Hls();
+    hlsRef.value = hls;
     hls.on(Hls.Events.MANIFEST_PARSED, () => {
-      if (!hls) return;
       levels.value = hls.levels
         .map((l, i) => ({ index: i, height: l.height || 0 }))
         .filter((l) => l.height > 0)
         .sort((a, b) => b.height - a.height);
     });
-    hls.on(Hls.Events.LEVEL_SWITCHED, (_evt, data) => {
-      autoLevel.value = data.level;
-    });
     hls.loadSource(props.src);
     hls.attachMedia(video);
-    document.addEventListener('click', onDocClick);
   } else {
-    loading = false;
+    loading.value = false;
   }
+  document.addEventListener('click', onDocClick);
+  document.addEventListener('fullscreenchange', onFsChange);
 });
 
 onUnmounted(() => {
+  clearTimeout(hideTimer);
   document.removeEventListener('click', onDocClick);
-  hls?.destroy();
-  hls = null;
+  document.removeEventListener('fullscreenchange', onFsChange);
+  hlsRef.value?.destroy();
+  hlsRef.value = null;
 });
 </script>
+
+<style scoped>
+.ctrl-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 0.5rem;
+  color: #fff;
+  transition: background-color 0.15s;
+}
+.ctrl-btn:hover {
+  background-color: rgba(255, 255, 255, 0.15);
+}
+.ctrl-btn :deep(i) {
+  font-size: 0.95rem;
+}
+.q-item {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0.9rem;
+  font-size: 0.8rem;
+  color: #fff;
+  text-align: left;
+  transition: background-color 0.15s;
+}
+.q-item:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+</style>
