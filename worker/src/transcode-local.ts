@@ -8,9 +8,11 @@ function hasFfmpeg(): Promise<boolean> {
   });
 }
 
-function runFfmpeg(args: string[]): Promise<void> {
+function runCmd(cmd: string, args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
-    execFile('ffmpeg', args, (err) => (err ? reject(err) : resolve()));
+    execFile(cmd, args, { maxBuffer: 16 * 1024 * 1024 }, (err, stdout) =>
+      err ? reject(err) : resolve(String(stdout)),
+    );
   });
 }
 
@@ -19,29 +21,62 @@ function runFfmpeg(args: string[]): Promise<void> {
 async function extractPoster(rawPath: string, posterPath: string): Promise<void> {
   const args = (ss: string) => ['-y', '-ss', ss, '-i', rawPath, '-frames:v', '1', '-vf', 'scale=720:-2', '-q:v', '3', posterPath];
   try {
-    await runFfmpeg(args('1'));
+    await runCmd('ffmpeg', args('1'));
   } catch {
-    await runFfmpeg(args('0'));
+    await runCmd('ffmpeg', args('0'));
   }
 }
 
-// Phase 1 local: doc file raw tai cho, xuat HLS vao storage/hls/<jobId>/.
-// Co ffmpeg that: chay preset p480/p720. Khong co: ghi playlist SIMULATED
-// de player/CMS test luong end-to-end (len Coolify cai ffmpeg that).
-export async function transcodeLocal(rawPath: string, hlsDir: string): Promise<{ simulated: boolean; playlist: string }> {
+interface Rendition {
+  name: string;
+  height: number;
+  width: number;
+  vBitrate: string;
+  maxRate: string;
+  bufSize: string;
+  aBitrate: string;
+  bandwidth: number; // BANDWIDTH khai bao trong master (video+audio+overhead)
+}
+
+// 3 muc giong VTC Play: 360p / 480p / 720p (+ che do Auto do player tu chuyen).
+const RENDITIONS: Rendition[] = [
+  { name: '360p', height: 360, width: 640, vBitrate: '800k', maxRate: '856k', bufSize: '1200k', aBitrate: '64k', bandwidth: 950000 },
+  { name: '480p', height: 480, width: 854, vBitrate: '1400k', maxRate: '1498k', bufSize: '2100k', aBitrate: '96k', bandwidth: 1600000 },
+  { name: '720p', height: 720, width: 1280, vBitrate: '2800k', maxRate: '2996k', bufSize: '4200k', aBitrate: '128k', bandwidth: 3100000 },
+];
+
+async function probeHeight(rawPath: string): Promise<number> {
+  try {
+    const out = await runCmd('ffprobe', [
+      '-v', 'error', '-select_streams', 'v:0',
+      '-show_entries', 'stream=height', '-of', 'csv=p=0', rawPath,
+    ]);
+    return parseInt(out.trim(), 10) || 0;
+  } catch {
+    return 0;
+  }
+}
+
+function writeMaster(hlsDir: string, renditions: Rendition[]): string {
+  const lines = ['#EXTM3U'];
+  for (const r of renditions) {
+    lines.push(`#EXT-X-STREAM-INF:BANDWIDTH=${r.bandwidth},RESOLUTION=${r.width}x${r.height}`);
+    lines.push(`${r.name}.m3u8`);
+  }
+  const p = join(hlsDir, 'master.m3u8');
+  writeFileSync(p, lines.join('\n') + '\n');
+  return p;
+}
+
+// Transcode multibitrate: doc file raw tai cho, xuat HLS vao storage/hls/<jobId>/
+// — 1 master.m3u8 + 1 variant playlist cho moi muc chat luong.
+// Khong upscale: chi tao cac muc <= chieu cao nguon. Nguon nho hon 360p
+// (hoac khong probe duoc) -> fallback 1 luong nhu cu.
+export async function transcodeLocal(rawPath: string, hlsDir: string): Promise<{ simulated: boolean; playlist: string; renditions: string[] }> {
   mkdirSync(hlsDir, { recursive: true });
   if (!existsSync(rawPath)) throw new Error(`raw not found: ${rawPath}`);
-  if (await hasFfmpeg()) {
-    await new Promise<void>((resolve, reject) => {
-      execFile(
-        'ffmpeg',
-        ['-y', '-i', rawPath, '-c:v', 'libx264', '-preset', 'veryfast', '-c:a', 'aac', '-hls_time', '6', '-hls_list_size', '0', join(hlsDir, 'master.m3u8')],
-        (err) => (err ? reject(err) : resolve()),
-      );
-    });
-    // Poster tu dong: ghi thang vao storage/images (chung volume voi backend)
-    // de backend phuc vu cong khai tai /images/thumb-<uploadId>.jpg va CMS
-    // tu dien lam thumbnail khi noi dung chua co anh rieng.
+
+  const finishPoster = async () => {
     try {
       const imagesDir = join(dirname(hlsDir), '..', 'images');
       mkdirSync(imagesDir, { recursive: true });
@@ -49,13 +84,51 @@ export async function transcodeLocal(rawPath: string, hlsDir: string): Promise<{
     } catch {
       // Bo qua: thieu poster khong phai loi transcode.
     }
-    return { simulated: false, playlist: join(hlsDir, 'master.m3u8') };
+  };
+
+  if (!(await hasFfmpeg())) {
+    // SIMULATED (khong co ffmpeg): master gia voi du 3 muc de FE/CMS test ABR.
+    for (const r of RENDITIONS) {
+      writeFileSync(join(hlsDir, `${r.name}.m3u8`),
+        `#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:6\n#EXTINF:6.0,\n${r.name}-seg-0.ts\n#EXT-X-ENDLIST\n`);
+      writeFileSync(join(hlsDir, `${r.name}-seg-0.ts`), 'SIMULATED');
+    }
+    const playlist = writeMaster(hlsDir, RENDITIONS);
+    return { simulated: true, playlist, renditions: RENDITIONS.map((r) => r.name) };
   }
-  const playlist = join(hlsDir, 'master.m3u8');
-  writeFileSync(
-    playlist,
-    '#EXTM3U\n# Phase 1 SIMULATED playlist - cai ffmpeg that tren Coolify\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:6\n#EXTINF:6.0,\nseg-0.ts\n#EXT-X-ENDLIST\n',
-  );
-  writeFileSync(join(hlsDir, 'seg-0.ts'), 'SIMULATED');
-  return { simulated: true, playlist };
+
+  const srcHeight = await probeHeight(rawPath);
+  const picked = RENDITIONS.filter((r) => srcHeight > 0 && r.height <= srcHeight);
+
+  if (picked.length === 0) {
+    // Fallback: nguon qua nho hoac khong probe duoc -> 1 luong giu nguyen kich thuoc.
+    await runCmd('ffmpeg', [
+      '-y', '-i', rawPath, '-c:v', 'libx264', '-preset', 'veryfast',
+      '-c:a', 'aac', '-hls_time', '6', '-hls_list_size', '0', join(hlsDir, 'master.m3u8'),
+    ]);
+    await finishPoster();
+    return { simulated: false, playlist: join(hlsDir, 'master.m3u8'), renditions: ['source'] };
+  }
+
+  // 1 lenh ffmpeg duy nhat: decode 1 lan, encode song song cac muc.
+  // force_key_frames theo chu ky segment de cac muc chuyen canh khop nhau (ABR muot).
+  const args: string[] = ['-y', '-i', rawPath];
+  picked.forEach((r, i) => {
+    args.push(
+      '-map', '0:v:0', '-map', '0:a?',
+      `-c:v:${i}`, 'libx264', '-preset', 'veryfast',
+      `-b:v:${i}`, r.vBitrate, `-maxrate:v:${i}`, r.maxRate, `-bufsize:v:${i}`, r.bufSize,
+      `-vf:v:${i}`, `scale=-2:${r.height}`,
+      `-force_key_frames:v:${i}`, 'expr:gte(t,n_forced*6)',
+      `-c:a:${i}`, 'aac', `-b:a:${i}`, r.aBitrate, `-ac:a:${i}`, '2',
+      '-f', 'hls', '-hls_time', '6', '-hls_list_size', '0',
+      '-hls_segment_filename', join(hlsDir, `${r.name}_%03d.ts`),
+      join(hlsDir, `${r.name}.m3u8`),
+    );
+  });
+  await runCmd('ffmpeg', args);
+
+  const playlist = writeMaster(hlsDir, picked);
+  await finishPoster();
+  return { simulated: false, playlist, renditions: picked.map((r) => r.name) };
 }

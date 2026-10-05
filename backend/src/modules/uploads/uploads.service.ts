@@ -321,7 +321,9 @@ export class UploadsService implements OnModuleInit {
     return { hls_path: this.signedPlayUrl(uploadId), poster: this.posterUrlFor(uploadId) };
   }
 
-  /** Doc master.m3u8 va viet lai segment URL thanh URL ky rieng (han 8h). */
+  /** Doc master.m3u8 va viet lai URL thanh URL ky rieng (han 8h).
+   *  Multibitrate: dong variant (*.m3u8) -> endpoint /v/ de rewrite tiep segment
+   *  ben trong; dong segment (.ts) -> URL static /media co ky nhu cu. */
   signedPlaylist(uploadId: string, baseUrl: string): string {
     if (!isValidUploadId(uploadId)) throw new Error('invalid upload id');
     const playlistPath = join(this.storageRoot(), 'hls', uploadId, 'master.m3u8');
@@ -339,6 +341,31 @@ export class UploadsService implements OnModuleInit {
         if (!t || t.startsWith('#')) return line;
         const seg = t.split('/').pop() || '';
         if (!/^[A-Za-z0-9_.-]+$/.test(seg)) return line; // giu nguyen dong la
+        if (/\.m3u8$/i.test(seg)) {
+          // variant playlist: di qua controller de rewrite segment ben trong
+          return `${base}/api/v1/media/${uploadId}/v/${seg}?exp=${segExp}&sig=${segSig}`;
+        }
+        return `${base}/media/${uploadId}/${seg}?exp=${segExp}&sig=${segSig}`;
+      })
+      .join('\n');
+  }
+
+  /** Doc variant playlist (360p.m3u8, ...) va viet lai segment thanh URL ky rieng. */
+  signedVariantPlaylist(uploadId: string, variant: string, baseUrl: string): string {
+    if (!isValidUploadId(uploadId)) throw new Error('invalid upload id');
+    if (!/^[A-Za-z0-9_.-]+\.m3u8$/i.test(variant)) throw new Error('invalid variant');
+    const playlistPath = join(this.storageRoot(), 'hls', uploadId, variant);
+    if (!existsSync(playlistPath)) throw new Error('playlist not found');
+    const segExp = Math.floor(Date.now() / 1000) + SEGMENT_TTL_SEC;
+    const segSig = signMedia(uploadId, segExp);
+    const base = this.publicBase() || baseUrl;
+    return readFileSync(playlistPath, 'utf8')
+      .split('\n')
+      .map((line) => {
+        const t = line.trim();
+        if (!t || t.startsWith('#')) return line;
+        const seg = t.split('/').pop() || '';
+        if (!/^[A-Za-z0-9_.-]+$/.test(seg) || /\.m3u8$/i.test(seg)) return line;
         return `${base}/media/${uploadId}/${seg}?exp=${segExp}&sig=${segSig}`;
       })
       .join('\n');

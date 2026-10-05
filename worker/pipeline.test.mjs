@@ -57,3 +57,45 @@ test('queue interface giu nguyen (enqueue/status) cho BullMQ/poll', async () => 
   q.mark(job.id, 'done');
   assert.deepEqual(q.pending(), []);
 });
+
+test('pipeline: multibitrate 720p -> master 3 variant (360p/480p/720p)', async (t) => {
+  if (!(await hasFfmpeg())) {
+    t.skip('ffmpeg khong co san');
+    return;
+  }
+  const dir = mkdtempSync(join(tmpdir(), 'vtc-mb-'));
+  const src = join(dir, 'in.mp4');
+  await new Promise((resolve, reject) => {
+    execFile('ffmpeg', ['-y', '-f', 'lavfi', '-i', 'testsrc=duration=4:size=1280x720:rate=10', '-pix_fmt', 'yuv420p', src],
+      (err) => (err ? reject(err) : resolve()));
+  });
+  const hlsDir = join(dir, 'hls');
+  const res = await transcodeLocal(src, hlsDir);
+  assert.equal(res.simulated, false);
+  assert.deepEqual(res.renditions, ['360p', '480p', '720p']);
+  const master = readFileSync(res.playlist, 'utf8');
+  const variants = [...master.matchAll(/#EXT-X-STREAM-INF:([^\n]+)\n([^\n]+)/g)];
+  assert.equal(variants.length, 3);
+  for (const [, info, uri] of variants) {
+    assert.match(info, /BANDWIDTH=\d+/);
+    const vfile = join(hlsDir, uri.trim());
+    assert.ok(existsSync(vfile), `variant playlist ${uri} ton tai`);
+    const segs = readdirSync(hlsDir).filter((f) => f.startsWith(uri.trim().replace('.m3u8', '_')) && f.endsWith('.ts'));
+    assert.ok(segs.length > 0, `co segment cho ${uri}`);
+  }
+});
+
+test('pipeline: nguon 480p -> khong upscale len 720p', async (t) => {
+  if (!(await hasFfmpeg())) {
+    t.skip('ffmpeg khong co san');
+    return;
+  }
+  const dir = mkdtempSync(join(tmpdir(), 'vtc-mb2-'));
+  const src = join(dir, 'in.mp4');
+  await new Promise((resolve, reject) => {
+    execFile('ffmpeg', ['-y', '-f', 'lavfi', '-i', 'testsrc=duration=2:size=854x480:rate=10', '-pix_fmt', 'yuv420p', src],
+      (err) => (err ? reject(err) : resolve()));
+  });
+  const res = await transcodeLocal(src, join(dir, 'hls'));
+  assert.deepEqual(res.renditions, ['360p', '480p']);
+});

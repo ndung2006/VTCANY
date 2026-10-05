@@ -125,3 +125,37 @@ test('videoPlay dung VOD_PUBLIC_BASE_URL khi co dat', async () => {
   const play = svc.videoPlay('vid-vod');
   assert.match(play.hls_path, /^https:\/\/vod\.vtcrd\.top\/api\/v1\/media\/.+\/playlist\.m3u8\?exp=\d+&sig=[0-9a-f]{64}$/);
 });
+
+test('signedPlaylist multibitrate: variant -> /v/ endpoint, segment -> /media/', async () => {
+  const { writeFileSync, mkdirSync } = await import('fs');
+  const svc = svcWithTmp();
+  const root = svc.storageRoot();
+  const uid = 'upl-mb1';
+  mkdirSync(join(root, 'hls', uid), { recursive: true });
+  writeFileSync(join(root, 'hls', uid, 'master.m3u8'),
+    '#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=950000,RESOLUTION=640x360\n360p.m3u8\n#EXT-X-STREAM-INF:BANDWIDTH=1600000,RESOLUTION=854x480\n480p.m3u8\n');
+  const body = svc.signedPlaylist(uid, 'https://api.example.com');
+  const varLines = body.split('\n').filter((l) => l.includes('/v/'));
+  assert.equal(varLines.length, 2);
+  for (const l of varLines) {
+    assert.match(l, new RegExp(`^https://api\\.example\\.com/api/v1/media/${uid}/v/(360p|480p)\\.m3u8\\?exp=\\d+&sig=[0-9a-f]{64}$`));
+  }
+});
+
+test('signedVariantPlaylist viet lai segment trong variant', async () => {
+  const { writeFileSync, mkdirSync } = await import('fs');
+  const svc = svcWithTmp();
+  const root = svc.storageRoot();
+  const uid = 'upl-mb2';
+  mkdirSync(join(root, 'hls', uid), { recursive: true });
+  writeFileSync(join(root, 'hls', uid, '360p.m3u8'),
+    '#EXTM3U\n#EXT-X-VERSION:3\n#EXTINF:6.0,\n360p_000.ts\n#EXTINF:6.0,\n360p_001.ts\n#EXT-X-ENDLIST\n');
+  const body = svc.signedVariantPlaylist(uid, '360p.m3u8', 'https://api.example.com');
+  const segLines = body.split('\n').filter((l) => l.includes('/media/'));
+  assert.equal(segLines.length, 2);
+  for (const l of segLines) {
+    assert.match(l, new RegExp(`^https://api\\.example\\.com/media/${uid}/360p_00\\d\\.ts\\?exp=\\d+&sig=[0-9a-f]{64}$`));
+  }
+  assert.throws(() => svc.signedVariantPlaylist(uid, '../x.m3u8', 'https://api.example.com'), /invalid variant/);
+  assert.throws(() => svc.signedVariantPlaylist(uid, 'nope.m3u8', 'https://api.example.com'), /playlist not found/);
+});

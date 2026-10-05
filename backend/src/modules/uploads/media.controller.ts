@@ -39,4 +39,37 @@ export class MediaController {
       );
     }
   }
+
+  // Variant playlist cho multibitrate (360p.m3u8, 480p.m3u8, ...):
+  // /api/v1/media/<uploadId>/v/<variant>.m3u8?exp=..&sig=..
+  // Rewrite segment ben trong thanh URL ky tuyet doi (player khong forward query).
+  @Get(':uploadId/v/:variant')
+  variant(
+    @Param('uploadId') uploadId: string,
+    @Param('variant') variant: string,
+    @Query('exp') exp: string,
+    @Query('sig') sig: string,
+    @Req() req: Request,
+    @Res() res: Response,
+  ): void {
+    if (!verifyMedia(uploadId, exp, sig)) {
+      throw new HttpException(
+        { error: { code: 'media_forbidden', message: 'URL phat media het han hoac khong hop le' } },
+        HttpStatus.FORBIDDEN,
+      );
+    }
+    try {
+      const proto = (req.headers['x-forwarded-proto'] as string)?.split(',')[0]?.trim() || req.protocol;
+      const baseUrl = `${proto}://${req.get('host')}`;
+      const body = this.uploads.signedVariantPlaylist(uploadId, variant, baseUrl);
+      res.set('Content-Type', 'application/vnd.apple.mpegurl');
+      res.set('Cache-Control', 'no-store');
+      res.send(body);
+    } catch {
+      throw new HttpException(
+        { error: { code: 'playlist_not_found', message: 'playlist chua san sang' } },
+        HttpStatus.NOT_FOUND,
+      );
+    }
+  }
 }
