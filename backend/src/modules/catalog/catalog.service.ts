@@ -441,6 +441,7 @@ export class CatalogService implements OnModuleInit {
   async createEpisode(movieId: string, input: any): Promise<Episode> {
     await this.get('movies', movieId); // 404 neu movie khong ton tai
     const data = input || {};
+    if (!data.title && data.name) data.title = data.name; // CMS gui name
     if (!data.title || !String(data.title).trim()) throw new Error('title is required');
     const seasonId = data.seasonId || null;
     if (seasonId) {
@@ -488,6 +489,7 @@ export class CatalogService implements OnModuleInit {
   async createSeason(movieId: string, input: any): Promise<Season> {
     await this.get('movies', movieId); // 404 neu movie khong ton tai
     const data = input || {};
+    if (!data.title && data.name) data.title = data.name; // CMS gui name
     if (!data.title || !String(data.title).trim()) throw new Error('title is required');
     const item = { ...data, movieId, id: data.id || nid('se'), createdAt: new Date().toISOString() };
     await this.seasonDb.create({ data: { id: item.id, movieId, data: item } });
@@ -545,6 +547,7 @@ export class CatalogService implements OnModuleInit {
   async createTrailer(owner: { movieId?: string; seasonId?: string }, input: any): Promise<Trailer> {
     const { movieId, seasonId } = await this.assertTrailerOwner(owner);
     const data = input || {};
+    if (!data.title && data.name) data.title = data.name; // CMS gui name
     if (!data.title || !String(data.title).trim()) throw new Error('title is required');
     const item = { ...data, movieId, seasonId, id: data.id || nid('tr'), createdAt: new Date().toISOString() };
     await this.trailerDb.create({ data: { id: item.id, movieId, seasonId, data: item } });

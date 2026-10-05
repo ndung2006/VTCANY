@@ -9,7 +9,7 @@ export class ApiExceptionFilter implements ExceptionFilter {
     if (exception instanceof HttpException) {
       const status = exception.getStatus();
       const body: any = exception.getResponse();
-      const message = typeof body === 'string' ? body : body?.message || exception.message;
+      const message = typeof body === 'string' ? body : body?.error?.message || body?.message || exception.message;
       const code = typeof body === 'object' && body?.error?.code ? body.error.code : this.codeFor(status);
       res.status(status).json({ error: { code, message } });
       return;
