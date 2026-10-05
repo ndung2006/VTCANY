@@ -1,10 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { MOVIES, buildTabs } from './dist/modules/movies/movies.catalog.js';
+import { FEATURED_THAM_TINH_PUBLIC_ID } from './dist/modules/layout/seed-data.js';
 import { MoviesService } from './dist/modules/movies/movies.service.js';
 
 const svc = new MoviesService();
-const THAM_TINH = '6925687120dd0e58b0facba3';
+const THAM_TINH = FEATURED_THAM_TINH_PUBLIC_ID;
 
 test('Tham Tinh: 22 episodes, tabs 10/tab (contract 3B)', async () => {
   const d = await svc.detail(THAM_TINH);
@@ -20,7 +21,7 @@ test('Tham Tinh: 22 episodes, tabs 10/tab (contract 3B)', async () => {
 
 test('catalog covers all phim rail items (card links resolve)', async () => {
   const ids = new Set(MOVIES.map((m) => m.public_id));
-  assert.ok(ids.size >= 20);
+  assert.ok(ids.size >= 15); // 1 hero movie + 16 rail phim items
   for (const m of MOVIES) {
     assert.match(m.public_id, /^[0-9a-f]{24}$/);
     await svc.detail(m.public_id); // must not throw

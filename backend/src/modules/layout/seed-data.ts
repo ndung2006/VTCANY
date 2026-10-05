@@ -12,8 +12,9 @@ export interface HeroItem {
   id: string;
   image_url: string;
   title: string;
-  action: 'OPEN_MOVIE';
-  target_id: string; // {slug}-{24hex}
+  action: 'OPEN_MOVIE' | 'OPEN_URL';
+  target_id: string; // {slug}-{24hex} (khi action=OPEN_MOVIE)
+  target_url?: string; // FE uu tien dung khi co (khi action=OPEN_URL)
 }
 
 export interface RailItem {
@@ -38,16 +39,136 @@ export interface HomeBlockSeed {
   items: Array<HeroItem | RailItem>;
 }
 
+const WEB_ORIGIN = 'https://any.vtcrd.top';
+const BANNERS = `${WEB_ORIGIN}/banners`;
+const SAMPLES = `${WEB_ORIGIN}/samples`;
+
 const thumb = (seed: string, w: number, h: number) =>
   `https://picsum.photos/seed/${seed}/${w}/${h}`;
 
-const HERO_MOVIES = [
-  { slug: 'tham-tinh', title: 'Thâm Tình', publicId: '6925687120dd0e58b0facba3' },
-  { slug: 'kick-off-the-thao', title: 'Kick-off Thể Thao', publicId: seedHex('hero', 1) },
-  { slug: 'check-in-viet-nam', title: 'Check in Việt Nam', publicId: seedHex('hero', 2) },
-  { slug: 'phim-chieu-rap-hay', title: 'Phim Chiếu Rạp Hay', publicId: seedHex('hero', 3) },
-  { slug: 'short-noi-bat', title: 'Short Nổi Bật', publicId: seedHex('hero', 4) },
+function slugifyViSeed(input: string): string {
+  return (input || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'd')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .replace(/-{2,}/g, '-');
+}
+
+// public_id cua catalog item = sha256(`catalog:${id}`)[:24] — deterministic
+// theo id co dinh, de hero co the link thang toi trang chi tiet item mau.
+export function samplePublicId(itemId: string): string {
+  return createHash('sha256').update(`catalog:${itemId}`).digest('hex').slice(0, 24);
+}
+
+// ---- Noi dung mau: moi section 3 items (de cuon thu trang) ----
+// CatalogService seed idempotent theo cac dinh nghia nay.
+export interface SampleCategoryDef {
+  id: string;
+  name: string;
+  slug: string;
+  appliesTo: string[];
+}
+export const SAMPLE_CATEGORIES: SampleCategoryDef[] = [
+  { id: 'cat-mau-kickoff-the-thao', name: 'KICK-OFF Thể thao (mẫu)', slug: 'mau-kickoff-the-thao', appliesTo: ['video'] },
+  { id: 'cat-mau-phim-bo', name: 'Phim bộ (mẫu)', slug: 'mau-phim-bo', appliesTo: ['phim'] },
+  { id: 'cat-mau-short', name: 'Short (mẫu)', slug: 'mau-short', appliesTo: ['short'] },
 ];
+
+export interface SampleItemDef {
+  id: string;
+  entity: 'videos' | 'movies' | 'shorts';
+  title: string;
+  thumbnail: string;
+  posterUrl?: string;
+  categorySlug: string;
+}
+export const SAMPLE_ITEMS: SampleItemDef[] = [
+  { id: 'vi-mau-kickoff-1', entity: 'videos', title: 'KICK-OFF Thể thao | 05/10/2026', thumbnail: `${SAMPLES}/sample-video-1.jpg`, categorySlug: 'mau-kickoff-the-thao' },
+  { id: 'vi-mau-kickoff-2', entity: 'videos', title: 'KICK-OFF Thể thao | 04/10/2026', thumbnail: `${SAMPLES}/sample-video-2.jpg`, categorySlug: 'mau-kickoff-the-thao' },
+  { id: 'vi-mau-kickoff-3', entity: 'videos', title: 'KICK-OFF Thể thao | 03/10/2026', thumbnail: `${SAMPLES}/sample-video-3.jpg`, categorySlug: 'mau-kickoff-the-thao' },
+  { id: 'mo-mau-phimbo-1', entity: 'movies', title: 'Thâm Tình', thumbnail: `${SAMPLES}/sample-movie-1.jpg`, posterUrl: `${SAMPLES}/sample-movie-1.jpg`, categorySlug: 'mau-phim-bo' },
+  { id: 'mo-mau-phimbo-2', entity: 'movies', title: 'Sóng Gió', thumbnail: `${SAMPLES}/sample-movie-2.jpg`, posterUrl: `${SAMPLES}/sample-movie-2.jpg`, categorySlug: 'mau-phim-bo' },
+  { id: 'mo-mau-phimbo-3', entity: 'movies', title: 'Nắng Mới', thumbnail: `${SAMPLES}/sample-movie-3.jpg`, posterUrl: `${SAMPLES}/sample-movie-3.jpg`, categorySlug: 'mau-phim-bo' },
+  { id: 'sh-mau-short-1', entity: 'shorts', title: 'Check in Sa Pa', thumbnail: `${SAMPLES}/sample-short-1.jpg`, categorySlug: 'mau-short' },
+  { id: 'sh-mau-short-2', entity: 'shorts', title: 'Check in Hội An', thumbnail: `${SAMPLES}/sample-short-2.jpg`, categorySlug: 'mau-short' },
+  { id: 'sh-mau-short-3', entity: 'shorts', title: 'Check in Phú Quốc', thumbnail: `${SAMPLES}/sample-short-3.jpg`, categorySlug: 'mau-short' },
+];
+
+// Rail nao cua moi section se hien thi 3 item mau (gan categoryId luc seed).
+export const SAMPLE_RAIL_LINKS = [
+  { section: 'home', title: 'KICK-OFF THỂ THAO', categorySlug: 'mau-kickoff-the-thao' },
+  { section: 'movies', title: 'Phim Bộ', categorySlug: 'mau-phim-bo' },
+  { section: 'video', title: 'KICK - OFF Thể thao', categorySlug: 'mau-kickoff-the-thao' },
+  { section: 'short', title: 'Check in Việt Nam', categorySlug: 'mau-short' },
+  { section: 'entertainment', title: 'KICK - OFF Thể thao', categorySlug: 'mau-kickoff-the-thao' },
+];
+
+// ---- Hero banner rieng cho tung section (giong VTC Play) ----
+interface HeroDef {
+  file: string;
+  title: string; // tieu de hien thi tren banner (FE overlay)
+  kind: 'phim' | 'video' | 'short';
+  itemId: string; // id co dinh cua sample item
+  itemTitle: string; // title goc cua sample item (de tinh slug + public_id)
+  // Chi hero phim cua home giu target_id hop le: movies.catalog index tu
+  // HERO_CAROUSEL (search/test phu thuoc); cac hero khac FE dung target_url.
+  movieTarget?: boolean;
+}
+function heroItems(defs: HeroDef[]): HeroItem[] {
+  return defs.map((d, i) => {
+    const slug = slugifyViSeed(d.itemTitle);
+    const publicId = samplePublicId(d.itemId);
+    return {
+      id: `banner-${i + 1}`,
+      image_url: `${BANNERS}/${d.file}`,
+      title: d.title,
+      action: 'OPEN_URL' as const,
+      target_id: d.movieTarget ? `${slug}-${publicId}` : '',
+      target_url: `/${d.kind}/${slug}-${publicId}`,
+    };
+  });
+}
+
+// Public ID on dinh cua phim noi bat "Tham Tinh" (sample) — movies.catalog
+// dung de nhan dien phim dac biet 22 tap; test dung chung const nay.
+export const FEATURED_THAM_TINH_PUBLIC_ID = samplePublicId('mo-mau-phimbo-1');
+
+const V1 = { kind: 'video' as const, itemId: 'vi-mau-kickoff-1', itemTitle: 'KICK-OFF Thể thao | 05/10/2026' };
+const V2 = { kind: 'video' as const, itemId: 'vi-mau-kickoff-2', itemTitle: 'KICK-OFF Thể thao | 04/10/2026' };
+const V3 = { kind: 'video' as const, itemId: 'vi-mau-kickoff-3', itemTitle: 'KICK-OFF Thể thao | 03/10/2026' };
+const M1 = { kind: 'phim' as const, itemId: 'mo-mau-phimbo-1', itemTitle: 'Thâm Tình' };
+const M2 = { kind: 'phim' as const, itemId: 'mo-mau-phimbo-2', itemTitle: 'Sóng Gió' };
+const S1 = { kind: 'short' as const, itemId: 'sh-mau-short-1', itemTitle: 'Check in Sa Pa' };
+const S2 = { kind: 'short' as const, itemId: 'sh-mau-short-2', itemTitle: 'Check in Hội An' };
+const S3 = { kind: 'short' as const, itemId: 'sh-mau-short-3', itemTitle: 'Check in Phú Quốc' };
+
+export const SECTION_HEROES: Record<string, HeroItem[]> = {
+  home: heroItems([
+    { file: 'hero-home-kickoff.jpg', title: 'KICK-OFF THỂ THAO', ...V1 },
+    { file: 'hero-home-checkin.jpg', title: 'Check in Việt Nam', ...S1 },
+    { file: 'hero-home-phimbo.jpg', title: 'Thâm Tình', ...M1, movieTarget: true },
+  ]),
+  movies: heroItems([
+    { file: 'hero-movies-phimbo.jpg', title: 'Phim bộ đặc sắc', ...M1 },
+    { file: 'hero-movies-rap.jpg', title: 'Phim chiếu rạp', ...M2 },
+  ]),
+  video: heroItems([
+    { file: 'hero-video-kickoff.jpg', title: 'KICK-OFF Thể thao', ...V1 },
+    { file: 'hero-video-canhac.jpg', title: 'Ca nhạc đỉnh cao', ...V2 },
+  ]),
+  short: heroItems([
+    { file: 'hero-short-noibat.jpg', title: 'Short nổi bật', ...S1 },
+    { file: 'hero-short-khampha.jpg', title: 'Khám phá mỗi ngày', ...S2 },
+  ]),
+  entertainment: heroItems([
+    { file: 'hero-ent-gameshow.jpg', title: 'Gameshow cười thả ga', ...V3 },
+    { file: 'hero-ent-canhac.jpg', title: 'Ca nhạc giải trí', ...S3 },
+  ]),
+};
 
 interface RailDef {
   title: string;
@@ -136,13 +257,7 @@ export const HOME_SEED: HomeBlockSeed[] = [
   {
     order: 1,
     type: 'HERO_CAROUSEL',
-    items: HERO_MOVIES.map((m, i): HeroItem => ({
-      id: `banner-${i + 1}`,
-      image_url: thumb(`hero-${i}`, 1280, 720),
-      title: m.title,
-      action: 'OPEN_MOVIE',
-      target_id: `${m.slug}-${m.publicId}`,
-    })),
+    items: SECTION_HEROES.home,
   },
   ...buildRails(),
 ];

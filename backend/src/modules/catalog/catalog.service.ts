@@ -1,7 +1,8 @@
 import { Injectable, Logger, OnModuleInit, Optional } from '@nestjs/common';
-import { createHash } from 'crypto';
+import { createHash, randomBytes } from 'crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { UploadsService } from '../uploads/uploads.service';
+import { SAMPLE_CATEGORIES, SAMPLE_ITEMS, SAMPLE_RAIL_LINKS } from '../layout/seed-data';
 
 // Catalog CMS theo mau VTCPlay — persist Postgres qua Prisma (bang catalog_items/
 // catalog_episodes/catalog_settings, payload Json giu nguyen API shape linh hoat).
@@ -297,47 +298,110 @@ export class CatalogService implements OnModuleInit {
       this.logger.warn(`Bo qua seed plans (DB chua san sang?): ${(e as Error).message}`);
     }
     // Seed khoi giao dien (rails) mac dinh theo tung muc — giong cac rail dang ON
-    // tren VTCPlay. Backfill theo tung section con thieu (idempotent): section nao
-    // chua co rail nao thi seed cac khoi mac dinh cua section do; khong dung den
-    // rail admin da tao. categorySlug duoc resolve sang categoryId luc seed
-    // (neu danh muc chua co thi endpoint tu resolve theo slug).
+    // tren VTCPlay. Idempotent theo tung (section, title): section nao thieu rail
+    // nao thi seed bu rail do; khong dung den rail admin da tao/sua.
     try {
       const catDb: any = (this.prisma as any).category;
       const existing = await this.prisma.catalogItem.findMany({ where: { entity: 'rails' } });
-      const hasSection = new Set((existing || []).map((r: any) => (r.data as any)?.section));
-      const bySection = new Map<string, typeof RAIL_SEED>();
-      for (const s of RAIL_SEED) {
-        if (!bySection.has(s.section)) bySection.set(s.section, []);
-        bySection.get(s.section)!.push(s);
-      }
+      const existingKeys = new Set(
+        (existing || []).map((r: any) => `${(r.data as any)?.section}::${(r.data as any)?.title}`),
+      );
       let seeded = 0;
-      for (const [section, seeds] of bySection) {
-        if (hasSection.has(section)) continue;
-        for (const s of seeds) {
-          let categoryId: string | undefined;
-          if (s.categorySlug && catDb) {
-            try {
-              const c = await catDb.findUnique({ where: { slug: s.categorySlug } });
-              if (c) categoryId = c.id;
-            } catch { /* bo qua */ }
-          }
-          await this.create('rails', {
-            title: s.title,
-            section: s.section,
-            platform: 'web',
-            contentType: s.contentType,
-            categoryId,
-            categorySlug: s.categorySlug,
-            sortOrder: s.sortOrder,
-            style: 'Mặc định',
-            isVisible: true,
-          });
-          seeded += 1;
+      for (const s of RAIL_SEED) {
+        if (existingKeys.has(`${s.section}::${s.title}`)) continue;
+        let categoryId: string | undefined;
+        if (s.categorySlug && catDb) {
+          try {
+            const c = await catDb.findUnique({ where: { slug: s.categorySlug } });
+            if (c) categoryId = c.id;
+          } catch { /* bo qua */ }
         }
+        await this.create('rails', {
+          title: s.title,
+          section: s.section,
+          platform: 'web',
+          contentType: s.contentType,
+          categoryId,
+          categorySlug: s.categorySlug,
+          sortOrder: s.sortOrder,
+          style: 'Mặc định',
+          isVisible: true,
+        });
+        seeded += 1;
       }
       if (seeded > 0) this.logger.log(`Da seed ${seeded} khoi giao dien mac dinh.`);
     } catch (e) {
       this.logger.warn(`Bo qua seed rails (DB chua san sang?): ${(e as Error).message}`);
+    }
+    // Noi dung mau: moi section 3 items + gan rail (de user cuon thu trang).
+    await this.seedSampleContent();
+  }
+
+  // Seed 3 danh muc + 9 item mau (id co dinh -> public_id on dinh de hero link toi).
+  // Idempotent: chi tao khi chua co; gan categoryId cho rail theo SAMPLE_RAIL_LINKS.
+  private async seedSampleContent(): Promise<void> {
+    try {
+      const catDb: any = (this.prisma as any).category;
+      if (!catDb) return;
+      const catIdBySlug = new Map<string, string>();
+      for (const c of SAMPLE_CATEGORIES) {
+        let row: any = null;
+        try {
+          row = await catDb.findUnique({ where: { slug: c.slug } });
+        } catch { /* bo qua */ }
+        if (!row) {
+          row = await catDb.create({
+            data: {
+              id: c.id,
+              publicId: randomBytes(12).toString('hex'),
+              name: c.name,
+              slug: c.slug,
+              parentId: null,
+              sortOrder: 99,
+              isVisible: true,
+              platforms: ['WEB'],
+              appliesTo: c.appliesTo,
+              contentSort: 'created',
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            },
+          });
+          this.logger.log(`Da seed danh muc mau: ${c.slug}`);
+        }
+        catIdBySlug.set(c.slug, row.id);
+      }
+      for (const it of SAMPLE_ITEMS) {
+        let exists = true;
+        try {
+          await this.get(it.entity, it.id);
+        } catch {
+          exists = false;
+        }
+        if (!exists) {
+          await this.create(it.entity, {
+            id: it.id,
+            title: it.title,
+            thumbnail: it.thumbnail,
+            ...(it.posterUrl ? { posterUrl: it.posterUrl } : {}),
+            categoryIds: [catIdBySlug.get(it.categorySlug)!],
+            isVisible: true,
+          });
+          this.logger.log(`Da seed item mau: ${it.title}`);
+        }
+      }
+      const rails = await this.list('rails', { page: 1, limit: 200 });
+      for (const link of SAMPLE_RAIL_LINKS) {
+        const r = (rails.data || []).find(
+          (x: any) => x.section === link.section && x.title === link.title,
+        );
+        const catId = catIdBySlug.get(link.categorySlug);
+        if (r && catId && r.categoryId !== catId) {
+          await this.update('rails', r.id, { categoryId: catId });
+          this.logger.log(`Da gan rail "${link.title}" (${link.section}) -> ${link.categorySlug}`);
+        }
+      }
+    } catch (e) {
+      this.logger.warn(`Bo qua seed noi dung mau (DB chua san sang?): ${(e as Error).message}`);
     }
   }
 

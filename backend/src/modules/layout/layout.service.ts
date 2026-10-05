@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { HOME_SEED, HomeBlockSeed } from './seed-data';
+import { HOME_SEED, HomeBlockSeed, SECTION_HEROES, HeroItem } from './seed-data';
 
 // Server-Driven UI: GET /api/v1/layout/home?platform=WEB (Mục 3A).
 // Nguồn đọc: bảng layout_blocks (migration 0001) — Phase hiện tại dùng seed
@@ -32,6 +32,13 @@ export class LayoutService {
     };
     this.cache.set(key, { exp: now + CACHE_TTL_MS, data });
     return data;
+  }
+
+  // Hero banner rieng cho tung section (trang chu / phim / video / short / giai tri)
+  // — giong VTC Play. Fallback ve home khi section la.
+  getSectionHero(section: string): HeroItem[] {
+    const key = (section || 'home').toLowerCase();
+    return SECTION_HEROES[key] ?? SECTION_HEROES.home;
   }
 
   // ---- Admin CRUD (Banner/Rail) ----

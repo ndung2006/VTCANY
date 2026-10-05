@@ -10,9 +10,14 @@ test('home returns 6 blocks: 1 hero + 5 rails (contract 3A)', () => {
   assert.equal(home.layout_blocks.length, 6);
   const hero = home.layout_blocks[0];
   assert.equal(hero.type, 'HERO_CAROUSEL');
-  assert.equal(hero.items.length, 5);
-  assert.equal(hero.items[0].action, 'OPEN_MOVIE');
-  assert.match(hero.items[0].target_id, /-[0-9a-f]{24}$/);
+  // Hero moi: 3 banner/section, link truc tiep qua target_url; hero phim giu
+  // target_id hop le de movies.catalog index (search).
+  assert.equal(hero.items.length, 3);
+  assert.ok(hero.items.every((it) => it.image_url && it.title));
+  assert.match(hero.items[0].target_url, /^\/video\//);
+  const movieHero = hero.items.find((it) => it.target_id);
+  assert.match(movieHero.target_id, /-[0-9a-f]{24}$/);
+  assert.match(movieHero.target_url, /^\/phim\//);
   const rails = home.layout_blocks.slice(1);
   assert.ok(rails.every((b) => b.type === 'HORIZONTAL_LIST'));
   assert.deepEqual(
@@ -29,4 +34,15 @@ test('home returns 6 blocks: 1 hero + 5 rails (contract 3A)', () => {
 
 test('cache returns same object within 60s ttl', () => {
   assert.equal(svc.getHome('WEB'), svc.getHome('web'));
+});
+
+test('section hero: moi tab co banner rieng, fallback home khi section la', () => {
+  const sections = { home: 3, movies: 2, video: 2, short: 2, entertainment: 2 };
+  for (const [section, n] of Object.entries(sections)) {
+    const hero = svc.getSectionHero(section);
+    assert.equal(hero.length, n, section);
+    assert.ok(hero.every((it) => it.image_url && it.title && it.target_url));
+  }
+  assert.deepEqual(svc.getSectionHero('khong-co'), svc.getSectionHero('home'));
+  assert.deepEqual(svc.getSectionHero('MOVIES'), svc.getSectionHero('movies'));
 });

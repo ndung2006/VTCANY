@@ -20,6 +20,12 @@ export class LayoutController {
     return this.layout.getHome(platform);
   }
 
+  // Hero banner theo section cho cac tab (FE TabHomePage goi theo section).
+  @Get('layout/section/:section')
+  async sectionHero(@Param('section') section: string) {
+    return { platform: 'WEB', section, hero: this.layout.getSectionHero(section) };
+  }
+
   @Get('channels/:slug/detail')
   async detail(@Param('slug') slug: string, @Query('date') date?: string) {
     const name = slug.toUpperCase();

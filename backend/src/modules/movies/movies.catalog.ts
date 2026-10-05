@@ -1,4 +1,4 @@
-import { HOME_SEED } from '../layout/seed-data';
+import { FEATURED_THAM_TINH_PUBLIC_ID, HOME_SEED } from '../layout/seed-data';
 
 // Bước 4/8 — Catalog phim in-memory dựng từ seed trang chủ (Mục 3B).
 // Postgres (videos + episodes) thay catalog này, giữ nguyên shape trả về.
@@ -64,7 +64,7 @@ function buildCatalog(): MovieRec[] {
         if (!m) continue;
         const [, slug, publicId] = m;
         if (movies.some((x) => x.public_id === publicId)) continue;
-        const isThamTinh = publicId === '6925687120dd0e58b0facba3';
+        const isThamTinh = publicId === FEATURED_THAM_TINH_PUBLIC_ID;
         const total = isThamTinh ? 22 : 12;
         movies.push({
           public_id: publicId,

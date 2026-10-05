@@ -64,9 +64,10 @@ test('CatalogService backfill: section da co rail thi khong seed them', async ()
   const svc = new CatalogService(prisma);
   await svc.onModuleInit();
   const rails = prisma._items.filter((i) => i.entity === 'rails').map((i) => i.data);
-  // home giu nguyen 1 rail cu; 4 section con lai duoc seed (5+5+5+3=18)
-  assert.equal(rails.length, 19);
-  assert.equal(rails.filter((r) => r.section === 'home').length, 1);
+  // Idempotent theo tung (section, title): home giu 1 rail cu + seed bu 8 rail
+  // con thieu; 4 section con lai duoc seed (5+5+5+3=18) -> tong 27.
+  assert.equal(rails.length, 27);
+  assert.equal(rails.filter((r) => r.section === 'home').length, 9);
   assert.equal(rails.filter((r) => r.section === 'movies').length, 5);
   assert.equal(rails.filter((r) => r.section === 'video').length, 5);
   assert.equal(rails.filter((r) => r.section === 'short').length, 5);
@@ -139,4 +140,61 @@ test('GET /catalog/categories/:id: theo id va publicId; 404 khi an/khong ton tai
       assert.equal(e.getStatus(), 404);
     }
   }
+});
+
+test('seedSampleContent: 3 danh muc + 9 item mau + gan rail (idempotent)', async () => {
+  const cats = [];
+  const items = [];
+  const prisma = {
+    catalogItem: {
+      count: async () => 1, // bo qua seed plans
+      findMany: async ({ where } = {}) => items.filter((i) => !where?.entity || i.entity === where.entity),
+      create: async ({ data }) => { items.push(data); return data; },
+      findFirst: async ({ where }) => items.find((i) => i.id === where.id && i.entity === where.entity) || null,
+      update: async ({ where, data }) => {
+        const it = items.find((i) => i.id === where.id);
+        it.data = data.data;
+        return it;
+      },
+    },
+    category: {
+      findUnique: async ({ where }) => cats.find((c) => c.slug === where.slug) || null,
+      create: async ({ data }) => { cats.push(data); return data; },
+    },
+  };
+  // Gia lap rails da seed san (can gan categoryId)
+  const railSeeds = [
+    ['home', 'KICK-OFF THỂ THAO', 'video'], ['movies', 'Phim Bộ', 'movie'],
+    ['video', 'KICK - OFF Thể thao', 'video'], ['short', 'Check in Việt Nam', 'short'],
+    ['entertainment', 'KICK - OFF Thể thao', 'video'],
+  ];
+  for (const [section, title, contentType] of railSeeds) {
+    items.push({ id: `rl-${section}`, entity: 'rails',
+      data: { id: `rl-${section}`, title, section, contentType, sortOrder: 1, isVisible: true } });
+  }
+  const { CatalogService: CS } = await import('./dist/modules/catalog/catalog.service.js');
+  const svc = new CS(prisma);
+  await svc.onModuleInit();
+  assert.equal(cats.length, 3);
+  assert.deepEqual(cats.map((c) => c.slug).sort(),
+    ['mau-kickoff-the-thao', 'mau-phim-bo', 'mau-short']);
+  assert.ok(cats.every((c) => c.isVisible === true));
+  const sampleItems = items.filter((i) => ['videos', 'movies', 'shorts'].includes(i.entity));
+  assert.equal(sampleItems.length, 9);
+  assert.ok(sampleItems.every((i) => i.data.isVisible !== false && (i.data.categoryIds || []).length === 1));
+  // public_id on dinh theo id co dinh
+  const { samplePublicId } = await import('./dist/modules/layout/seed-data.js');
+  const v1 = sampleItems.find((i) => i.id === 'vi-mau-kickoff-1');
+  assert.match(samplePublicId('vi-mau-kickoff-1'), /^[0-9a-f]{24}$/);
+  assert.ok(v1.data.thumbnail.startsWith('https://any.vtcrd.top/samples/'));
+  // rail da duoc gan categoryId
+  for (const [section] of railSeeds) {
+    const r = items.find((i) => i.id === `rl-${section}`).data;
+    assert.ok(r.categoryId, `rail ${section} co categoryId`);
+  }
+  // idempotent: chay lai khong tao trung
+  const nItems = items.length, nCats = cats.length;
+  await svc.onModuleInit();
+  assert.equal(items.length, nItems);
+  assert.equal(cats.length, nCats);
 });
