@@ -2,7 +2,6 @@ import { Controller, Get, HttpException, HttpStatus, Param, Post, Req, UseGuards
 import { JwtService } from '@nestjs/jwt';
 import { MoviesService } from './movies.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { buildTabs } from './movies.catalog';
 
 // Public (ẩn danh xem được). Chỉ /favorite yêu cầu JWT.
 @Controller('movies')
@@ -28,19 +27,18 @@ export class MoviesController {
 
   // GET /api/v1/movies/{public_id} (Mục 3B).
   @Get(':publicId')
-  detail(@Param('publicId') publicId: string, @Req() req: any) {
+  async detail(@Param('publicId') publicId: string, @Req() req: any) {
     try {
-      return this.movies.detail(publicId, this.optionalUserId(req));
+      return await this.movies.detail(publicId, this.optionalUserId(req));
     } catch (e) {
       this.toHttp(e);
     }
   }
 
   @Get(':publicId/episodes')
-  episodes(@Param('publicId') publicId: string) {
+  async episodes(@Param('publicId') publicId: string) {
     try {
-      const m = this.movies.get(publicId);
-      return { public_id: publicId, tabs: buildTabs(m.total_episodes), episodes: m.episodes };
+      return await this.movies.episodeList(publicId);
     } catch (e) {
       this.toHttp(e);
     }
@@ -48,9 +46,9 @@ export class MoviesController {
 
   @UseGuards(JwtAuthGuard)
   @Post(':publicId/favorite')
-  favorite(@Param('publicId') publicId: string, @Req() req: any) {
+  async favorite(@Param('publicId') publicId: string, @Req() req: any) {
     try {
-      return this.movies.toggleFavorite(req.user.sub, publicId);
+      return await this.movies.toggleFavorite(req.user.sub, publicId);
     } catch (e) {
       this.toHttp(e);
     }

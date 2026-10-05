@@ -15,6 +15,6 @@ import { AdminModule } from '../admin/admin.module';
   imports: [AuthModule, AuditModule, ContentModule, UploadsModule, PrismaModule, AdminModule],
   controllers: [CatalogController, VodController, PublicCatalogController],
   providers: [CatalogService, VodService],
-  exports: [CatalogService],
+  exports: [CatalogService, VodService],
 })
 export class CatalogModule {}
