@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { PlaybackService } from './dist/modules/playback/playback.service.js';
+import { urlExpMs } from './dist/modules/playback/aio-client.js';
 
 const ROTATING = 'https://luuchieu1.vtcplay.vn/hls/ANGIANG1/tc-p720/index.m3u8?token=abc&exp=999';
 
@@ -58,4 +59,31 @@ test('mint: ca hai deu hong -> nem loi goc', async () => {
     return { ok: false, status: 200, json: async () => ({ error: 'doi tac bi tat quyen' }) };
   };
   await assert.rejects(svc().mint('KHONGCO'), /aio: http 200|bad token/);
+});
+
+test('urlExpMs: doc han that tu query param exp (ms)', () => {
+  assert.equal(urlExpMs('https://x/api/hls/A/master.m3u8?token=t&exp=1791297224343'), 1791297224343);
+});
+
+test('urlExpMs: exp dang giay -> doi sang ms', () => {
+  assert.equal(urlExpMs('https://x/api/hls/A/master.m3u8?exp=1791297224'), 1791297224000);
+});
+
+test('urlExpMs: khong co exp -> null', () => {
+  assert.equal(urlExpMs('https://x/api/hls/A/master.m3u8?token=t'), null);
+  assert.equal(urlExpMs('https://x/api/hls/A/master.m3u8'), null);
+});
+
+test('mint: uu tien exp trong URL thay vi exp khong dang tin trong body', async () => {
+  global.fetch = async (url) => {
+    if (String(url).includes('/api/hls-tokens')) {
+      return {
+        ok: true, status: 200,
+        json: async () => ({ token: 't', exp: 111, url: '/hls/ANGIANG1/index.m3u8?token=t&exp=1791297224343' }),
+      };
+    }
+    throw new Error('unexpected fetch ' + url);
+  };
+  const r = await svc().mint('ANGIANG1');
+  assert.equal(r.exp, 1791297224343);
 });

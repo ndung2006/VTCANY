@@ -81,6 +81,23 @@ export function fullUrl(baseUrl: string, path: string): string {
   return `${baseUrl.replace(/\/$/, '')}${path.startsWith('/') ? path : `/${path}`}`;
 }
 
+// Doc han that cua link xoay tu query param exp trong URL (ms epoch).
+// AIO tra exp trong response body khong phai han that (thuc te gan bang
+// thoi diem hien tai); exp trong URL moi la han that (~4h).
+export function urlExpMs(url: string): number | null {
+  try {
+    const q = url.indexOf('?');
+    if (q < 0) return null;
+    const v = new URLSearchParams(url.slice(q + 1)).get('exp');
+    if (!v) return null;
+    const n = Number(v);
+    if (!Number.isFinite(n) || n <= 0) return null;
+    return n < 1e12 ? Math.round(n * 1000) : Math.round(n); // giay -> ms
+  } catch {
+    return null;
+  }
+}
+
 async function aioFetch(cfg: AioConfig, path: string, init: RequestInit = {}): Promise<any> {
   if (!cfg.partnerKey) throw new Error('VTC_PARTNER_KEY is not configured (server-only)');
   // Retry 1 lan voi backoff cho loi mang/5xx (docs 14 §4). 401/403/404 tra ngay.

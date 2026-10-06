@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { clampTtlMinutes, fullUrl, getChannels, getEpgSchedule, isAudioOnly, mintToken, toMasterUrl } from './aio-client';
+import { clampTtlMinutes, fullUrl, getChannels, getEpgSchedule, isAudioOnly, mintToken, toMasterUrl, urlExpMs } from './aio-client';
 import type { AioConfig } from './aio-client';
 import { AioSourceService } from './aio-source.service';
 
@@ -29,12 +29,16 @@ export class PlaybackService {
     const ttl = clampTtlMinutes(ttlMinutes ?? Number(this.config.get('PLAYBACK_TTL_MINUTES', 240)));
     try {
       const t = await mintToken(cfg, channel, ttl);
+      const url = fullUrl(cfg.baseUrl, toMasterUrl(t.url));
+      // Han that cua link nam trong query param exp cua URL (response body
+      // tra exp gan bang now, khong phai han that).
+      const exp = urlExpMs(url) ?? t.exp;
       // Log exp moi lan xin de doi soat 403 voi operator (docs 25 §5.4).
       // eslint-disable-next-line no-console
-      console.log(`[playback] mint channel=${channel} exp=${new Date(t.exp).toISOString()} ttl=${ttl}m`);
+      console.log(`[playback] mint channel=${channel} exp=${new Date(exp).toISOString()} ttl=${ttl}m`);
       return {
-        hls_url: fullUrl(cfg.baseUrl, toMasterUrl(t.url)),
-        exp: t.exp,
+        hls_url: url,
+        exp,
         ttl_seconds: ttl * 60,
       };
     } catch (e: any) {
