@@ -79,7 +79,7 @@ interface Rail {
 // Banner do CMS quan ly (HIEN THI > Banner) — uu tien nhat de admin tu doi duoc;
 // fallback ve seed /layout/section/:section roi /layout/home khi backend cu
 // hoac CMS chua co banner nao.
-const { data: bannerData } = await useFetch('/banners', {
+const { data: bannerData } = await useFetch('/catalog/banners', {
   baseURL: config.public.apiBase as string,
   query: { page: props.section, platform: 'WEB' },
 });
