@@ -12,7 +12,10 @@ export interface AioChannel {
   epgId?: number | null;
   epgNow?: { title: string; startTime: string; endTime: string } | null;
   epg?: { schedule: string } | null;
-  hlsTranscode?: Array<{ preset: string }> | null;
+  hls?: string | null; // link truc tiep kem theo scan (neu co)
+  hlsRotating?: string | null; // link xoay ky san kem theo scan (neu co)
+  hlsTranscode?: Array<{ preset: string; hls?: string }> | null;
+  hlsTranscodeRotating?: Array<{ preset: string; hls: string }> | null;
 }
 
 // Audio-only (VOV1/VOV3): preset khong co p360/p480/p720.

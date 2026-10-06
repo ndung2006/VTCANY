@@ -1,10 +1,12 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { clampTtlMinutes, fullUrl, getChannels, getEpgSchedule, isAudioOnly, mintToken, toMasterUrl } from './aio-client';
+import type { AioConfig } from './aio-client';
 import { AioSourceService } from './aio-source.service';
 
 @Injectable()
 export class PlaybackService {
+  private readonly logger = new Logger(PlaybackService.name);
   constructor(private config: ConfigService, private aioSources: AioSourceService) {}
 
   // Uu tien nguon VTCAIO active trong CMS; chua cau hinh thi dung env.
@@ -25,15 +27,40 @@ export class PlaybackService {
   async mint(channel: string, ttlMinutes?: number) {
     const cfg = await this.cfg();
     const ttl = clampTtlMinutes(ttlMinutes ?? Number(this.config.get('PLAYBACK_TTL_MINUTES', 240)));
-    const t = await mintToken(cfg, channel, ttl);
-    // Log exp moi lan xin de doi soat 403 voi operator (docs 25 §5.4).
-    // eslint-disable-next-line no-console
-    console.log(`[playback] mint channel=${channel} exp=${new Date(t.exp).toISOString()} ttl=${ttl}m`);
-    return {
-      hls_url: fullUrl(cfg.baseUrl, toMasterUrl(t.url)),
-      exp: t.exp,
-      ttl_seconds: ttl * 60,
-    };
+    try {
+      const t = await mintToken(cfg, channel, ttl);
+      // Log exp moi lan xin de doi soat 403 voi operator (docs 25 §5.4).
+      // eslint-disable-next-line no-console
+      console.log(`[playback] mint channel=${channel} exp=${new Date(t.exp).toISOString()} ttl=${ttl}m`);
+      return {
+        hls_url: fullUrl(cfg.baseUrl, toMasterUrl(t.url)),
+        exp: t.exp,
+        ttl_seconds: ttl * 60,
+      };
+    } catch (e: any) {
+      // Fallback: doi tac chua duoc cap quyen /api/hls-tokens
+      // (VD "doi tac any da bi tat quyen lay link xoay") -> dung link xoay ky san
+      // kem theo channel scan (uu tien p720). Link nay co exp rieng (~4h).
+      const url = await this.rotatingUrl(cfg, channel);
+      if (!url) throw e;
+      this.logger.warn(`mint /api/hls-tokens that bai (${e?.message}), dung link xoay tu scan cho ${channel}`);
+      return { hls_url: url, exp: Date.now() + ttl * 60_000, ttl_seconds: ttl * 60 };
+    }
+  }
+
+  // Tim link xoay ky san trong channel scan cho 1 kenh.
+  private async rotatingUrl(cfg: AioConfig, channel: string): Promise<string | null> {
+    try {
+      const { channels } = await getChannels(cfg);
+      const found = (channels || []).find((c) => (c.name || '').toUpperCase() === channel.toUpperCase());
+      if (!found) return null;
+      const variants = found.hlsTranscodeRotating || found.hlsTranscode || [];
+      const pick = variants.find((v) => v.preset === 'p720') || variants[0];
+      if (pick?.hls) return pick.hls;
+      return found.hlsRotating || found.hls || null;
+    } catch {
+      return null;
+    }
   }
 
   async listChannels() {
