@@ -130,7 +130,9 @@
 import Hls from 'hls.js';
 
 // aspect: '16/9' (mac dinh) hoac '9/16' cho short doc.
-const props = defineProps<{ src: string; poster?: string; aspect?: string }>();
+// autoplay: bam kenh la phat luon (trang truyen hinh). Trinh duyet chan
+// autoplay co tieng khi khong co user activation -> tu fallback sang mute.
+const props = defineProps<{ src: string; poster?: string; aspect?: string; autoplay?: boolean }>();
 const emit = defineEmits<{ (e: 'ended'): void }>();
 
 const containerEl = ref<HTMLElement | null>(null);
@@ -176,6 +178,21 @@ function togglePlay() {
   if (!v) return;
   if (v.paused) v.play().catch(() => {});
   else v.pause();
+}
+// Tu phat ngay khi co the (autoplay). Thu co tieng truoc — click chon kenh
+// la user activation nen thuong duoc phep; neu bi chan thi phat mute.
+function tryAutoplay() {
+  const v = videoEl.value;
+  if (!v || !props.autoplay || !v.paused) return;
+  v.play()
+    .then(() => {
+      muted.value = v.muted;
+    })
+    .catch(() => {
+      v.muted = true;
+      muted.value = true;
+      v.play().catch(() => {});
+    });
 }
 function skip(sec: number) {
   const v = videoEl.value;
@@ -298,6 +315,7 @@ onMounted(() => {
   canPip.value = typeof (video as any).requestPictureInPicture === 'function';
   if (video.canPlayType('application/vnd.apple.mpegurl')) {
     video.src = props.src; // Safari: HLS native (khong co chon muc)
+    if (props.autoplay) video.addEventListener('canplay', tryAutoplay, { once: true });
   } else if (Hls.isSupported()) {
     const hls = new Hls();
     hlsRef.value = hls;
@@ -306,6 +324,7 @@ onMounted(() => {
         .map((l, i) => ({ index: i, height: l.height || 0 }))
         .filter((l) => l.height > 0)
         .sort((a, b) => b.height - a.height);
+      tryAutoplay();
     });
     hls.loadSource(props.src);
     hls.attachMedia(video);

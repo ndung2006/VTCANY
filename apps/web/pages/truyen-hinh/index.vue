@@ -4,7 +4,7 @@
     <div class="min-w-0 flex-1">
       <div class="overflow-hidden rounded-xl bg-black">
         <div v-if="current && epg?.channel.hls_url" class="aspect-video">
-          <VideoPlayer :key="current.public_id + '-' + playerKey" :src="epg.channel.hls_url" />
+          <VideoPlayer :key="current.public_id + '-' + playerKey" :src="epg.channel.hls_url" autoplay />
         </div>
         <div v-else class="flex aspect-video flex-col items-center justify-center gap-3 bg-black">
           <span class="flex h-16 w-16 items-center justify-center rounded-full bg-neutral-800">
