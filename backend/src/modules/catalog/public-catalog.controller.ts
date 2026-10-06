@@ -143,6 +143,10 @@ export class PublicCatalogController {
         items = (await this.catalog.listPublic(entity, { page: 1, limit: 24, categoryId })).data;
       } else if (entity === 'events') {
         items = (await this.catalog.listPublic('events', { page: 1, limit: 24 })).data;
+      } else if (entity) {
+        // Rail khong gan danh muc cu the: lay noi dung moi nhat theo loai
+        // (nhu VTCPlay) thay vi de trong vinh vien.
+        items = (await this.catalog.listPublic(entity, { page: 1, limit: 24 })).data;
       }
       data.push({
         id: r.id,
