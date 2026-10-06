@@ -92,6 +92,7 @@ export class TvService {
     const override = overrides.find((o) => channelKeyOf(o.channelKey) === channelKeyOf(name));
 
     let hlsUrl: string | null = null;
+    let hlsExp: number | null = null; // ms epoch — FE tu xin lai link truoc khi het han (link xoay 4h)
     let dashUrl: string | null = override?.dashUrl || null;
     let catchupUrl: string | null = override?.catchupHlsUrl || null;
     if (override?.hlsUrl) {
@@ -100,8 +101,10 @@ export class TvService {
       try {
         const t = await this.playback.mint(name);
         hlsUrl = t.hls_url;
+        hlsExp = t.exp || null;
       } catch {
         hlsUrl = null;
+        hlsExp = null;
       }
     }
 
@@ -127,6 +130,7 @@ export class TvService {
         logo: override?.logoUrl || null,
         banner_url: override?.bannerUrl || null,
         hls_url: hlsUrl,
+        hls_exp: hlsExp,
         dash_url: dashUrl,
         catchup_hls_url: catchupUrl,
       },

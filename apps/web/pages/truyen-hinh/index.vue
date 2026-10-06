@@ -4,7 +4,7 @@
     <div class="min-w-0 flex-1">
       <div class="overflow-hidden rounded-xl bg-black">
         <div v-if="current && epg?.channel.hls_url" class="aspect-video">
-          <VideoPlayer :key="current.public_id" :src="epg.channel.hls_url" />
+          <VideoPlayer :key="current.public_id + '-' + playerKey" :src="epg.channel.hls_url" />
         </div>
         <div v-else class="flex aspect-video flex-col items-center justify-center gap-3 bg-black">
           <span class="flex h-16 w-16 items-center justify-center rounded-full bg-neutral-800">
@@ -147,10 +147,52 @@ const activeDate = ref(todayIso);
 
 const current = ref<Channel | null>(null);
 const epg = ref<{
-  channel: { hls_url: string | null };
+  channel: { hls_url: string | null; hls_exp?: number | null };
   timeline: Array<{ time: string; title: string; status: string }>;
 } | null>(null);
 const showLogin = ref(false);
+// Tang moi khi link xoay duoc cap moi de VideoPlayer remount voi src moi.
+const playerKey = ref(0);
+// Link xoay chi co hieu luc 4h — tu xin lai truoc 10 phut de xem lien tuc khong dut.
+let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+function clearRefresh() {
+  if (refreshTimer) {
+    clearTimeout(refreshTimer);
+    refreshTimer = null;
+  }
+}
+async function fetchEpg(c: Channel) {
+  return await $fetch(`/channels/${c.public_id}/epg`, {
+    baseURL: config.public.apiBase as string,
+    query: { date: activeDate.value },
+    ...(token.value ? { headers: { Authorization: `Bearer ${token.value}` } } : {}),
+  }) as typeof epg.value;
+}
+function scheduleRefresh() {
+  clearRefresh();
+  const exp = epg.value?.channel?.hls_exp;
+  const url = epg.value?.channel?.hls_url;
+  if (!exp || !url) return;
+  const wait = exp - Date.now() - 10 * 60_000;
+  if (wait <= 0) return;
+  refreshTimer = setTimeout(async () => {
+    const c = current.value;
+    if (!c) return;
+    try {
+      const fresh = await fetchEpg(c);
+      // Chi remount player khi van dang xem dung kenh va co link moi.
+      if (current.value?.public_id === c.public_id && fresh?.channel?.hls_url) {
+        if (fresh.channel.hls_url !== epg.value?.channel?.hls_url) {
+          epg.value = fresh;
+          playerKey.value++;
+        }
+        scheduleRefresh();
+      }
+    } catch {
+      // Xin lai that bai: giu player cu phat den het han, khong lam gian doan.
+    }
+  }, Math.min(wait, 2_147_483_647));
+}
 
 async function pick(c: Channel) {
   const needLogin = config.public.requireLoginTv as boolean;
@@ -158,16 +200,15 @@ async function pick(c: Channel) {
     showLogin.value = true;
     return;
   }
+  clearRefresh();
   current.value = c;
   epg.value = null;
-  epg.value = await $fetch(`/channels/${c.public_id}/epg`, {
-    baseURL: config.public.apiBase as string,
-    query: { date: activeDate.value },
-    ...(token.value ? { headers: { Authorization: `Bearer ${token.value}` } } : {}),
-  });
+  epg.value = await fetchEpg(c);
+  scheduleRefresh();
 }
 
 watch(activeDate, () => {
   if (current.value) pick(current.value);
 });
+onUnmounted(() => clearRefresh());
 </script>
