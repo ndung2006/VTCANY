@@ -65,11 +65,16 @@
       </Carousel>
 
       <h3 class="mb-2 mt-4 text-sm font-bold uppercase text-neutral-300">Lịch phát sóng</h3>
-      <ul v-if="(epg?.timeline ?? []).length" class="flex max-h-[60vh] flex-col gap-1 overflow-y-auto">
+      <ul
+        v-if="(epg?.timeline ?? []).length"
+        ref="epgListEl"
+        class="flex max-h-[60vh] flex-col gap-1 overflow-y-auto"
+      >
         <li
           v-for="it in epg?.timeline ?? []"
           :key="it.time + it.title"
           class="flex items-center gap-3 rounded-lg px-2 py-1.5 text-sm hover:bg-neutral-800"
+          :class="it.status === 'LIVE' ? 'bg-neutral-800/80' : ''"
         >
           <span class="w-12 shrink-0 text-neutral-400">{{ it.time }}</span>
           <span class="min-w-0 flex-1 truncate">{{ it.title }}</span>
@@ -155,6 +160,21 @@ const epg = ref<{
 const showLogin = ref(false);
 // true trong luc cho API epg tra ve — de khong hien nham "Kenh chua co luong phat".
 const epgLoading = ref(false);
+const epgListEl = ref<HTMLElement | null>(null);
+// Cuon panel lich de hien: 3 chuong trinh da phat -> LIVE -> cac chuong trinh sap phat.
+function scrollEpgToLive() {
+  const ul = epgListEl.value;
+  if (!ul) return;
+  const tl = epg.value?.timeline ?? [];
+  const liveIdx = tl.findIndex((t) => t.status === 'LIVE');
+  if (liveIdx < 0) return;
+  const items = ul.querySelectorAll('li');
+  const target = items[Math.max(0, liveIdx - 3)] as HTMLElement | undefined;
+  if (!target) return;
+  const ulRect = ul.getBoundingClientRect();
+  const tRect = target.getBoundingClientRect();
+  ul.scrollTop += tRect.top - ulRect.top;
+}
 // Tang moi khi link xoay duoc cap moi de VideoPlayer remount voi src moi.
 const playerKey = ref(0);
 // Link xoay chi co hieu luc 4h — tu xin lai truoc 10 phut de xem lien tuc khong dut.
@@ -214,6 +234,8 @@ async function pick(c: Channel) {
     epgLoading.value = false;
   }
   scheduleRefresh();
+  await nextTick();
+  scrollEpgToLive();
 }
 
 watch(activeDate, () => {
