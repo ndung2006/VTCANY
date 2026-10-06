@@ -8,9 +8,11 @@
         </div>
         <div v-else class="flex aspect-video flex-col items-center justify-center gap-3 bg-black">
           <span class="flex h-16 w-16 items-center justify-center rounded-full bg-neutral-800">
-            <i class="pi pi-play text-2xl text-neutral-500" />
+            <i v-if="epgLoading" class="pi pi-spin pi-spinner text-2xl text-neutral-400" />
+            <i v-else class="pi pi-play text-2xl text-neutral-500" />
           </span>
-          <p v-if="current" class="text-sm text-neutral-400">Kênh chưa có luồng phát.</p>
+          <p v-if="epgLoading" class="text-sm text-neutral-400">Đang tải luồng phát...</p>
+          <p v-else-if="current" class="text-sm text-neutral-400">Kênh chưa có luồng phát.</p>
           <p v-else class="text-sm text-neutral-500">Chọn một kênh bên dưới để xem</p>
         </div>
       </div>
@@ -151,6 +153,8 @@ const epg = ref<{
   timeline: Array<{ time: string; title: string; status: string }>;
 } | null>(null);
 const showLogin = ref(false);
+// true trong luc cho API epg tra ve — de khong hien nham "Kenh chua co luong phat".
+const epgLoading = ref(false);
 // Tang moi khi link xoay duoc cap moi de VideoPlayer remount voi src moi.
 const playerKey = ref(0);
 // Link xoay chi co hieu luc 4h — tu xin lai truoc 10 phut de xem lien tuc khong dut.
@@ -203,7 +207,12 @@ async function pick(c: Channel) {
   clearRefresh();
   current.value = c;
   epg.value = null;
-  epg.value = await fetchEpg(c);
+  epgLoading.value = true;
+  try {
+    epg.value = await fetchEpg(c);
+  } finally {
+    epgLoading.value = false;
+  }
   scheduleRefresh();
 }
 
