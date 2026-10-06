@@ -99,7 +99,7 @@ export class TvService {
       hlsUrl = override.hlsUrl;
     } else {
       try {
-        const t = await this.playback.mint(name);
+        const t = await this.playback.stream(name);
         hlsUrl = t.hls_url;
         hlsExp = t.exp || null;
       } catch {

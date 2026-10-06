@@ -1,31 +1,22 @@
-// Test PlaybackService.mint: fallback sang link xoay tu channel scan khi
-// /api/hls-tokens bi tu choi (doi tac chua duoc cap quyen lay link xoay).
+// Test PlaybackService.stream (scan-only, phuong an A):
+// - Khong POST /api/hls-tokens nua (endpoint goc 1080i+MP2, khong cho web).
+// - Uu tien hlsMasterRotating (master multibitrate, ABR) tu catalog,
+//   roi moi xuong tung rendition (p720) / link don.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { PlaybackService } from './dist/modules/playback/playback.service.js';
 import { urlExpMs } from './dist/modules/playback/aio-client.js';
 
-const ROTATING = 'https://luuchieu1.vtcplay.vn/hls/ANGIANG1/tc-p720/index.m3u8?token=abc&exp=999';
+const MASTER = 'https://luuchieu1.vtcplay.vn/api/hls/LAICHAU/master.m3u8?token=abc&exp=1791308791486';
+const P720 = 'https://luuchieu1.vtcplay.vn/hls/LAICHAU/tc-p720/index.m3u8?token=abc&exp=1791308791486';
 
-function stubFetch({ tokensOk }) {
-  global.fetch = async (url, init = {}) => {
+function stubScan(channels) {
+  global.fetch = async (url) => {
     const u = String(url);
-    if (u.includes('/api/hls-tokens')) {
-      if (!tokensOk) {
-        return { ok: false, status: 200, json: async () => ({ error: 'đối tác any đã bị tắt quyền lấy link xoay' }) };
-      }
-      return { ok: true, status: 200, json: async () => ({ token: 't', exp: 123, url: '/hls/ANGIANG1/index.m3u8?token=t&exp=123' }) };
-    }
     if (u.includes('/api/public/channels')) {
       return {
         ok: true, status: 200,
-        json: async () => ({
-          baseUrl: 'https://luuchieu1.vtcplay.vn',
-          channels: [{
-            name: 'ANGIANG1', status: 'RUNNING', live: true,
-            hlsTranscodeRotating: [{ preset: 'p480', hls: 'https://x/p480.m3u8' }, { preset: 'p720', hls: ROTATING }],
-          }],
-        }),
+        json: async () => ({ baseUrl: 'https://luuchieu1.vtcplay.vn', channels }),
       };
     }
     throw new Error('unexpected fetch ' + u);
@@ -38,27 +29,67 @@ function svc() {
   return new PlaybackService(fakeConfig, fakeSources);
 }
 
-test('mint: /api/hls-tokens OK -> dung master url nhu cu', async () => {
-  stubFetch({ tokensOk: true });
-  const r = await svc().mint('ANGIANG1');
-  assert.equal(r.hls_url, 'https://luuchieu1.vtcplay.vn/api/hls/ANGIANG1/master.m3u8?token=t&exp=123');
+test('stream: uu tien hlsMasterRotating (master ABR), exp doc tu URL', async () => {
+  stubScan([{
+    name: 'LAICHAU', status: 'RUNNING', live: true,
+    hlsMasterRotating: MASTER,
+    hlsTranscodeRotating: [{ preset: 'p720', hls: P720 }],
+  }]);
+  const r = await svc().stream('LAICHAU');
+  assert.equal(r.hls_url, MASTER);
+  assert.equal(r.exp, 1791308791486);
+  assert.equal(r.ttl_seconds, 240 * 60);
 });
 
-test('mint: /api/hls-tokens bi tu choi quyen -> fallback link xoay p720 tu scan', async () => {
-  stubFetch({ tokensOk: false });
-  const r = await svc().mint('ANGIANG1');
-  assert.equal(r.hls_url, ROTATING);
-  assert.ok(r.ttl_seconds > 0);
+test('stream: khong co master -> xuong p720 don', async () => {
+  stubScan([{
+    name: 'LAICHAU', status: 'RUNNING', live: true,
+    hlsTranscodeRotating: [{ preset: 'p480', hls: 'https://x/p480.m3u8' }, { preset: 'p720', hls: P720 }],
+  }]);
+  const r = await svc().stream('LAICHAU');
+  assert.equal(r.hls_url, P720);
 });
 
-test('mint: ca hai deu hong -> nem loi goc', async () => {
+test('stream: radio lay master audio', async () => {
+  const am = 'https://luuchieu1.vtcplay.vn/api/hls/VOV1/master.m3u8?token=abc&exp=1791308791486';
+  stubScan([{
+    name: 'VOV1', status: 'RUNNING', live: true,
+    hlsMasterRotating: am,
+    hlsTranscodeRotating: [{ preset: 'paudio', hls: 'https://x/paudio.m3u8' }],
+  }]);
+  const r = await svc().stream('VOV1');
+  assert.equal(r.hls_url, am);
+});
+
+test('stream: khong phan biet hoa thuong ten kenh', async () => {
+  stubScan([{ name: 'LAICHAU', status: 'RUNNING', live: true, hlsMasterRotating: MASTER }]);
+  const r = await svc().stream('laichau');
+  assert.equal(r.hls_url, MASTER);
+});
+
+test('stream: catalog khong co link -> throw', async () => {
+  stubScan([{ name: 'VOV1', status: 'RUNNING', live: true }]);
+  await assert.rejects(svc().stream('VOV1'), /khong co link xoay/);
+});
+
+test('stream: khong goi /api/hls-tokens', async () => {
+  const seen = [];
   global.fetch = async (url) => {
-    if (String(url).includes('/api/public/channels')) {
-      return { ok: true, status: 200, json: async () => ({ channels: [] }) };
+    const u = String(url);
+    seen.push(u);
+    if (u.includes('/api/public/channels')) {
+      return {
+        ok: true, status: 200,
+        json: async () => ({
+          baseUrl: 'https://luuchieu1.vtcplay.vn',
+          channels: [{ name: 'LAICHAU', status: 'RUNNING', live: true, hlsMasterRotating: MASTER }],
+        }),
+      };
     }
-    return { ok: false, status: 200, json: async () => ({ error: 'doi tac bi tat quyen' }) };
+    throw new Error('unexpected fetch ' + u);
   };
-  await assert.rejects(svc().mint('KHONGCO'), /aio: http 200|bad token/);
+  await svc().stream('LAICHAU');
+  assert.ok(!seen.some((u) => u.includes('/api/hls-tokens')), 'khong duoc goi mint endpoint');
 });
 
 test('urlExpMs: doc han that tu query param exp (ms)', () => {
@@ -72,44 +103,4 @@ test('urlExpMs: exp dang giay -> doi sang ms', () => {
 test('urlExpMs: khong co exp -> null', () => {
   assert.equal(urlExpMs('https://x/api/hls/A/master.m3u8?token=t'), null);
   assert.equal(urlExpMs('https://x/api/hls/A/master.m3u8'), null);
-});
-
-test('mint: uu tien exp trong URL thay vi exp khong dang tin trong body', async () => {
-  global.fetch = async (url) => {
-    if (String(url).includes('/api/hls-tokens')) {
-      return {
-        ok: true, status: 200,
-        json: async () => ({ token: 't', exp: 111, url: '/hls/ANGIANG1/index.m3u8?token=t&exp=1791297224343' }),
-      };
-    }
-    throw new Error('unexpected fetch ' + url);
-  };
-  const r = await svc().mint('ANGIANG1');
-  assert.equal(r.exp, 1791297224343);
-});
-
-test('mint fallback: doc han that tu exp trong link xoay scan', async () => {
-  const scanUrl = 'https://luuchieu1.vtcplay.vn/hls/LAICHAU/tc-p720/index.m3u8?token=abc&exp=1791308791486';
-  global.fetch = async (url) => {
-    const u = String(url);
-    if (u.includes('/api/hls-tokens')) {
-      return { ok: false, status: 200, json: async () => ({ error: 'doi tac bi tat quyen' }) };
-    }
-    if (u.includes('/api/public/channels')) {
-      return {
-        ok: true, status: 200,
-        json: async () => ({
-          baseUrl: 'https://luuchieu1.vtcplay.vn',
-          channels: [{
-            name: 'LAICHAU', status: 'RUNNING', live: true,
-            hlsTranscodeRotating: [{ preset: 'p720', hls: scanUrl }],
-          }],
-        }),
-      };
-    }
-    throw new Error('unexpected fetch ' + u);
-  };
-  const r = await svc().mint('LAICHAU');
-  assert.equal(r.hls_url, scanUrl);
-  assert.equal(r.exp, 1791308791486);
 });

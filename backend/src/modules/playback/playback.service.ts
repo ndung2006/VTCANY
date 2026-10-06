@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { clampTtlMinutes, fullUrl, getChannels, getEpgSchedule, isAudioOnly, mintToken, toMasterUrl, urlExpMs } from './aio-client';
+import { clampTtlMinutes, getChannels, getEpgSchedule, isAudioOnly, urlExpMs } from './aio-client';
 import type { AioConfig } from './aio-client';
 import { AioSourceService } from './aio-source.service';
 
@@ -23,42 +23,31 @@ export class PlaybackService {
     };
   }
 
-  // Link xoay TTL 240 phut theo docs 25-VTC-ANY. FE xin lai cham nhat phut 210.
-  async mint(channel: string, ttlMinutes?: number) {
+  // Scan-only (phuong an A): lay link xoay tu catalog /api/public/channels,
+  // KHONG POST /api/hls-tokens nua — endpoint do sinh token cho kenh goc
+  // (1080i + audio MPEG1 Layer 2, danh cho nghiep vu keo goc/headend,
+  // khong phai de phat web). Catalog da co san hlsMasterRotating
+  // (master multibitrate, ABR) + hlsTranscodeRotating[] (tung rendition),
+  // TTL 240 phut theo docs 25-VTC-ANY. FE xin lai cham nhat phut 210.
+  async stream(channel: string, ttlMinutes?: number) {
     const cfg = await this.cfg();
     const ttl = clampTtlMinutes(ttlMinutes ?? Number(this.config.get('PLAYBACK_TTL_MINUTES', 240)));
-    try {
-      const t = await mintToken(cfg, channel, ttl);
-      const url = fullUrl(cfg.baseUrl, toMasterUrl(t.url));
-      // Han that cua link nam trong query param exp cua URL (response body
-      // tra exp gan bang now, khong phai han that).
-      const exp = urlExpMs(url) ?? t.exp;
-      // Log exp moi lan xin de doi soat 403 voi operator (docs 25 §5.4).
-      // eslint-disable-next-line no-console
-      console.log(`[playback] mint channel=${channel} exp=${new Date(exp).toISOString()} ttl=${ttl}m`);
-      return {
-        hls_url: url,
-        exp,
-        ttl_seconds: ttl * 60,
-      };
-    } catch (e: any) {
-      // Fallback: doi tac chua duoc cap quyen /api/hls-tokens
-      // (VD "doi tac any da bi tat quyen lay link xoay") -> dung link xoay ky san
-      // kem theo channel scan (uu tien p720). Link nay co exp rieng (~4h).
-      const url = await this.rotatingUrl(cfg, channel);
-      if (!url) throw e;
-      this.logger.warn(`mint /api/hls-tokens that bai (${e?.message}), dung link xoay tu scan cho ${channel}`);
-      // Doc han that tu URL nhu duong primary; khong co exp moi uoc luong now+ttl.
-      return { hls_url: url, exp: urlExpMs(url) ?? Date.now() + ttl * 60_000, ttl_seconds: ttl * 60 };
-    }
+    const url = await this.rotatingUrl(cfg, channel);
+    if (!url) throw new Error(`aio: kenh ${channel} khong co link xoay trong catalog`);
+    // eslint-disable-next-line no-console
+    console.log(`[playback] scan-only channel=${channel} exp=${new Date(urlExpMs(url) ?? 0).toISOString()} ttl=${ttl}m`);
+    return { hls_url: url, exp: urlExpMs(url) ?? Date.now() + ttl * 60_000, ttl_seconds: ttl * 60 };
   }
 
   // Tim link xoay ky san trong channel scan cho 1 kenh.
+  // Uu tien master multibitrate (ABR) -> tung rendition co dinh -> link don.
   private async rotatingUrl(cfg: AioConfig, channel: string): Promise<string | null> {
     try {
       const { channels } = await getChannels(cfg);
       const found = (channels || []).find((c) => (c.name || '').toUpperCase() === channel.toUpperCase());
       if (!found) return null;
+      if (found.hlsMasterRotating) return found.hlsMasterRotating;
+      if (found.hlsMaster) return found.hlsMaster;
       const variants = found.hlsTranscodeRotating || found.hlsTranscode || [];
       const pick = variants.find((v) => v.preset === 'p720') || variants[0];
       if (pick?.hls) return pick.hls;

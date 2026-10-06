@@ -16,6 +16,8 @@ export interface AioChannel {
   hlsRotating?: string | null; // link xoay ky san kem theo scan (neu co)
   hlsTranscode?: Array<{ preset: string; hls?: string }> | null;
   hlsTranscodeRotating?: Array<{ preset: string; hls: string }> | null;
+  hlsMaster?: string | null; // master multibitrate tinh kem theo scan (neu co)
+  hlsMasterRotating?: string | null; // master multibitrate xoay ky san (ABR, TTL 240p)
 }
 
 // Audio-only (VOV1/VOV3): preset khong co p360/p480/p720.

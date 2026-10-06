@@ -28,7 +28,7 @@ export class PlaybackController {
   @Post('token')
   async token(@Body() dto: MintTokenDto) {
     try {
-      return await this.playback.mint((dto.slug || 'PHUTHO').toUpperCase(), dto.ttlMinutes);
+      return await this.playback.stream((dto.slug || 'PHUTHO').toUpperCase(), dto.ttlMinutes);
     } catch (e: any) {
       const msg = e?.message || 'playback failed';
       throw new HttpException({ error: { code: 'upstream_error', message: msg } }, HttpStatus.BAD_GATEWAY);
