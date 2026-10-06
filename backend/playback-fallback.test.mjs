@@ -87,3 +87,29 @@ test('mint: uu tien exp trong URL thay vi exp khong dang tin trong body', async 
   const r = await svc().mint('ANGIANG1');
   assert.equal(r.exp, 1791297224343);
 });
+
+test('mint fallback: doc han that tu exp trong link xoay scan', async () => {
+  const scanUrl = 'https://luuchieu1.vtcplay.vn/hls/LAICHAU/tc-p720/index.m3u8?token=abc&exp=1791308791486';
+  global.fetch = async (url) => {
+    const u = String(url);
+    if (u.includes('/api/hls-tokens')) {
+      return { ok: false, status: 200, json: async () => ({ error: 'doi tac bi tat quyen' }) };
+    }
+    if (u.includes('/api/public/channels')) {
+      return {
+        ok: true, status: 200,
+        json: async () => ({
+          baseUrl: 'https://luuchieu1.vtcplay.vn',
+          channels: [{
+            name: 'LAICHAU', status: 'RUNNING', live: true,
+            hlsTranscodeRotating: [{ preset: 'p720', hls: scanUrl }],
+          }],
+        }),
+      };
+    }
+    throw new Error('unexpected fetch ' + u);
+  };
+  const r = await svc().mint('LAICHAU');
+  assert.equal(r.hls_url, scanUrl);
+  assert.equal(r.exp, 1791308791486);
+});

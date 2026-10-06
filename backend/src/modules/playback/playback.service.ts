@@ -48,7 +48,8 @@ export class PlaybackService {
       const url = await this.rotatingUrl(cfg, channel);
       if (!url) throw e;
       this.logger.warn(`mint /api/hls-tokens that bai (${e?.message}), dung link xoay tu scan cho ${channel}`);
-      return { hls_url: url, exp: Date.now() + ttl * 60_000, ttl_seconds: ttl * 60 };
+      // Doc han that tu URL nhu duong primary; khong co exp moi uoc luong now+ttl.
+      return { hls_url: url, exp: urlExpMs(url) ?? Date.now() + ttl * 60_000, ttl_seconds: ttl * 60 };
     }
   }
 
