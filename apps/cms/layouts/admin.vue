@@ -127,6 +127,7 @@ const groups = [
   {
     label: 'Hiển thị',
     items: [
+      { to: '/banner', label: 'Banner', icon: 'pi-flag' },
       { to: '/giao-dien', label: 'Giao diện', icon: 'pi-images' },
     ],
   },
@@ -168,7 +169,8 @@ const titles: Record<string, string> = {
   '/su-kien': 'Quản lý Sự kiện',
   '/danh-muc': 'Quản lý Danh mục',
   '/truyen-hinh': 'Truyền hình & EPG',
-  '/giao-dien': 'Giao diện (Banner / Rail)',
+  '/banner': 'Quản lý Banner',
+  '/giao-dien': 'Giao diện (Block / Rail)',
   '/nguoi-dung': 'Người dùng',
   '/thong-bao': 'Thông báo',
   '/tu-khoa': 'Từ khoá tìm kiếm & Từ cấm',

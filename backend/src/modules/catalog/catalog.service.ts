@@ -2,7 +2,7 @@ import { Injectable, Logger, OnModuleInit, Optional } from '@nestjs/common';
 import { createHash, randomBytes } from 'crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { UploadsService } from '../uploads/uploads.service';
-import { SAMPLE_CATEGORIES, SAMPLE_ITEMS, SAMPLE_RAIL_LINKS } from '../layout/seed-data';
+import { SAMPLE_CATEGORIES, SAMPLE_ITEMS, SAMPLE_RAIL_LINKS, BANNER_SEEDS } from '../layout/seed-data';
 
 // Catalog CMS theo mau VTCPlay — persist Postgres qua Prisma (bang catalog_items/
 // catalog_episodes/catalog_settings, payload Json giu nguyen API shape linh hoat).
@@ -335,6 +335,9 @@ export class CatalogService implements OnModuleInit {
     }
     // Noi dung mau: moi section 3 items + gan rail (de user cuon thu trang).
     await this.seedSampleContent();
+    // Banner mau cho CMS (HIEN THI > Banner) — bien the DB-backed cua hero seed,
+    // de admin tu sua/thay anh duoc; FE doc qua GET /banners.
+    await this.seedBanners();
   }
 
   // Seed 3 danh muc + 9 item mau (id co dinh -> public_id on dinh de hero link toi).
@@ -402,6 +405,36 @@ export class CatalogService implements OnModuleInit {
       }
     } catch (e) {
       this.logger.warn(`Bo qua seed noi dung mau (DB chua san sang?): ${(e as Error).message}`);
+    }
+  }
+
+  // Seed banner mau (idempotent theo section+title) — de CMS co san banner
+  // sua duoc ngay sau deploy; FE uu tien doc tu DB qua GET /banners.
+  private async seedBanners(): Promise<void> {
+    try {
+      const existing = await this.prisma.catalogItem.findMany({ where: { entity: 'banners' } });
+      const keys = new Set(
+        (existing || []).map((r: any) => `${(r.data as any)?.section}::${(r.data as any)?.title}`),
+      );
+      let n = 0;
+      for (const s of BANNER_SEEDS) {
+        if (keys.has(`${s.section}::${s.title}`)) continue;
+        await this.create('banners', {
+          title: s.title,
+          section: s.section,
+          platforms: ['web'],
+          linkType: s.linkType,
+          linkTarget: s.linkTarget,
+          imageWeb: s.imageWeb,
+          imageMobile: '',
+          sortOrder: s.sortOrder,
+          isVisible: true,
+        });
+        n += 1;
+      }
+      if (n > 0) this.logger.log(`Da seed ${n} banner mau cho CMS.`);
+    } catch (e) {
+      this.logger.warn(`Bo qua seed banner (DB chua san sang?): ${(e as Error).message}`);
     }
   }
 

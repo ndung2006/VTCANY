@@ -76,9 +76,13 @@ interface Rail {
   block: RailBlock;
 }
 
-// Hero banner rieng cho tung section (giong VTC Play: trang chu / phim / video /
-// short / giai tri moi trang co banner khac nhau); fallback /layout/home khi
-// backend cu chua co endpoint section.
+// Banner do CMS quan ly (HIEN THI > Banner) — uu tien nhat de admin tu doi duoc;
+// fallback ve seed /layout/section/:section roi /layout/home khi backend cu
+// hoac CMS chua co banner nao.
+const { data: bannerData } = await useFetch('/banners', {
+  baseURL: config.public.apiBase as string,
+  query: { page: props.section, platform: 'WEB' },
+});
 const { data: sectionHero } = await useFetch(`/layout/section/${props.section}`, {
   baseURL: config.public.apiBase as string,
   query: { platform: 'WEB' },
@@ -88,6 +92,8 @@ const { data: layoutData } = await useFetch('/layout/home', {
   query: { platform: 'WEB' },
 });
 const heroItems = computed(() => {
+  const bd = (bannerData.value as { data?: unknown } | null)?.data;
+  if (Array.isArray(bd) && bd.length) return bd as HeroItem[];
   const s = (sectionHero.value as { hero?: unknown } | null)?.hero;
   if (Array.isArray(s) && s.length) return s as HeroItem[];
   const blocks = ((layoutData.value as { layout_blocks?: any[] } | null)?.layout_blocks ?? []);

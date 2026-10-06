@@ -199,4 +199,72 @@ export class PublicCatalogController {
       );
     }
   }
+
+  // Banner trang chu / trang con do CMS quan ly (HIEN THI > Banner) — giong VTCPlay.
+  // ?page=home|tv|movies|video|short|entertainment & platform=web|mobile.
+  // Chi tra banner dang hien thi, dung nen tang, trong khung thoi gian; sap xep
+  // theo sortOrder. Shape giong hero FE (image_url/title/target_url).
+  @Get('banners')
+  async listBanners(@Query('page') page?: string, @Query('platform') platform?: string) {
+    const res = await this.catalog.list('banners', { page: 1, limit: 200 });
+    const now = Date.now();
+    const pf = (platform || 'web').toLowerCase();
+    const items = (res.data || [])
+      .filter((b: any) => {
+        if (b.isVisible === false) return false;
+        if (page && b.section !== page) return false;
+        // platforms: mang (moi) hoac string platform (cu); rong = moi nen tang.
+        const plats = Array.isArray(b.platforms)
+          ? b.platforms
+          : b.platform
+            ? [b.platform]
+            : [];
+        if (plats.length > 0 && !plats.map((p: any) => String(p).toLowerCase()).includes(pf)) return false;
+        if (b.visibleFrom && new Date(b.visibleFrom).getTime() > now) return false;
+        if (b.visibleTo && new Date(b.visibleTo).getTime() < now) return false;
+        return true;
+      })
+      .sort((a: any, b: any) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+    const data = [];
+    for (const b of items) {
+      data.push({
+        id: b.id,
+        image_url: pf === 'mobile' ? b.imageMobile || b.imageWeb || '' : b.imageWeb || b.imageMobile || '',
+        title: b.title || '',
+        action: 'OPEN_URL',
+        target_id: '',
+        target_url: await this.resolveBannerTarget(b),
+      });
+    }
+    return { data };
+  }
+
+  // Chuan hoa link banner ve URL FE hieu duoc:
+  // - http(s)://... hoac /duong/dan -> giu nguyen
+  // - movie|video|short + public_id 24hex hoac {slug}-{24hex} -> /phim|video|short/{slug}-{id}
+  // - category + public_id -> /danh-muc/{slug}-{id}
+  private async resolveBannerTarget(b: any): Promise<string> {
+    const t = String(b.linkTarget || '').trim();
+    const type = String(b.linkType || '').toLowerCase();
+    if (!t) return '';
+    if (/^https?:\/\//i.test(t) || t.startsWith('/')) return t;
+    const m = t.match(/-([0-9a-f]{24})$/);
+    const publicId = m ? m[1] : /^[0-9a-f]{24}$/.test(t) ? t : null;
+    if (!publicId) return '';
+    try {
+      if (type === 'category') {
+        const c = await this.categories.getByPublicId(publicId);
+        return `/danh-muc/${c.slug}-${publicId}`;
+      }
+      const kindMap: Record<string, string> = { movie: 'phim', video: 'video', short: 'short' };
+      const kind = kindMap[type];
+      if (kind) {
+        const it: any = await this.catalog.getPublic(`${type}s`, publicId);
+        if (it?.slug) return `/${kind}/${it.slug}-${publicId}`;
+      }
+    } catch {
+      /* noi dung bi xoa/an -> khong link */
+    }
+    return '';
+  }
 }

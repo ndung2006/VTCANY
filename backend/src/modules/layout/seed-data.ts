@@ -253,6 +253,36 @@ function buildRails(): HomeBlockSeed[] {
   }));
 }
 
+
+// ---- Seed banner cho CMS (HIEN THI > Banner): bien the DB-backed cua
+// SECTION_HEROES de admin tu sua duoc; FE doc qua GET /banners. ----
+export interface BannerSeedDef {
+  section: string;
+  title: string;
+  imageWeb: string;
+  linkType: 'movie' | 'video' | 'short';
+  linkTarget: string; // duong dan chi tiet (FE dung thang)
+  sortOrder: number;
+}
+const SEED_BANNER_KIND: Record<string, Record<string, 'movie' | 'video' | 'short'>> = {
+  home: { 'KICK-OFF THỂ THAO': 'video', 'Check in Việt Nam': 'short', 'Thâm Tình': 'movie' },
+  movies: { 'Phim bộ đặc sắc': 'movie', 'Phim chiếu rạp': 'movie' },
+  video: { 'KICK-OFF Thể thao': 'video', 'Ca nhạc đỉnh cao': 'video' },
+  short: { 'Short nổi bật': 'short', 'Khám phá mỗi ngày': 'short' },
+  entertainment: { 'Gameshow cười thả ga': 'video', 'Ca nhạc giải trí': 'short' },
+};
+export const BANNER_SEEDS: BannerSeedDef[] = Object.entries(SECTION_HEROES).flatMap(
+  ([section, heroes]) =>
+    heroes.map((h, i) => ({
+      section,
+      title: h.title,
+      imageWeb: h.image_url,
+      linkType: SEED_BANNER_KIND[section][h.title],
+      linkTarget: h.target_url || '',
+      sortOrder: i + 1,
+    })),
+);
+
 export const HOME_SEED: HomeBlockSeed[] = [
   {
     order: 1,

@@ -61,56 +61,6 @@
       </Dialog>
     </template>
 
-    <!-- TAB 2: Banner theo mục (catalog) -->
-    <template v-if="tab === 'banners'">
-      <div class="flex items-center justify-between">
-        <p class="text-sm text-neutral-400">Tổng: {{ bannerMeta.total }} banner</p>
-        <Button v-if="can('catalog:write')" label="Thêm banner" icon="pi pi-plus" @click="openBannerAdd" />
-      </div>
-      <div class="surface-card p-4">
-        <DataTable :value="banners" :loading="bannerLoading" paginator :rows="20" :total-records="bannerMeta.total"
-          lazy :first="(bannerMeta.page - 1) * bannerMeta.limit" @page="(e: any) => { bannerMeta.page = e.page + 1; loadBanners(); }" size="small">
-          <Column field="title" header="Tiêu đề" />
-          <Column header="Mục">
-            <template #body="{ data }">{{ sectionLabel(data.section) }}</template>
-          </Column>
-          <Column field="platform" header="Nền tảng" />
-          <Column field="sortOrder" header="Thứ tự" style="width:6rem" />
-          <Column header="Hiển thị" style="width:8rem">
-            <template #body="{ data }"><Tag :value="data.isVisible ? 'Bật' : 'Tắt'" :severity="sevVisible(data.isVisible)" /></template>
-          </Column>
-          <Column header="Thao tác" style="min-width:10rem">
-            <template #body="{ data }">
-              <Button v-if="can('catalog:write')" label="Sửa" size="small" text @click="openBannerEdit(data)" />
-              <Button v-if="can('catalog:write')" label="Xóa" size="small" text severity="danger" @click="bannerCtl.confirmDelete(confirm, data.id, data.title)" />
-            </template>
-          </Column>
-        </DataTable>
-      </div>
-
-      <Dialog v-model:visible="bannerDlg" modal :header="editingBanner ? 'Sửa banner' : 'Thêm banner'" class="w-full max-w-xl">
-        <div class="grid grid-cols-2 gap-3">
-          <div class="col-span-2"><label class="field-label">Tiêu đề *</label><InputText v-model="bannerForm.title" class="w-full" /></div>
-          <div><label class="field-label">Mục</label>
-            <Dropdown v-model="bannerForm.section" :options="sections" option-label="label" option-value="value" class="w-full" />
-          </div>
-          <div><label class="field-label">Nền tảng</label>
-            <Dropdown v-model="bannerForm.platform" :options="['web', 'mobile']" class="w-full" />
-          </div>
-          <div><label class="field-label">Thứ tự</label><InputNumber v-model="bannerForm.sortOrder" class="w-full" :use-grouping="false" /></div>
-          <div class="flex items-end pb-2"><div class="flex items-center gap-2"><Checkbox v-model="bannerForm.isVisible" binary input-id="bvis" /><label for="bvis">Hiển thị</label></div></div>
-          <div><label class="field-label">Hiển thị từ</label><Calendar v-model="bannerForm.visibleFrom" date-format="yy-mm-dd" show-icon class="w-full" /></div>
-          <div><label class="field-label">Hiển thị đến</label><Calendar v-model="bannerForm.visibleTo" date-format="yy-mm-dd" show-icon class="w-full" /></div>
-          <div class="col-span-2"><label class="field-label">Ảnh web (URL)</label><InputText v-model="bannerForm.imageWeb" class="w-full" /></div>
-          <div class="col-span-2"><label class="field-label">Ảnh mobile (URL)</label><InputText v-model="bannerForm.imageMobile" class="w-full" /></div>
-        </div>
-        <template #footer>
-          <Button label="Hủy" text @click="bannerDlg = false" />
-          <Button :label="editingBanner ? 'Lưu' : 'Tạo'" :loading="bannerSaving" @click="saveBanner" :disabled="!bannerForm.title.trim()" />
-        </template>
-      </Dialog>
-    </template>
-
     <!-- TAB 3: Khối giao diện theo mục (giống CMS VTCPlay: 6 trang con) -->
     <template v-if="tab === 'rails'">
       <div class="flex flex-wrap items-center gap-2">
@@ -239,7 +189,6 @@ const confirm = useConfirm();
 
 const tabs = [
   { key: 'blocks', label: 'Layout blocks', icon: 'pi pi-th-large' },
-  { key: 'banners', label: 'Banner theo mục', icon: 'pi pi-image' },
   { key: 'rails', label: 'Khối giao diện theo mục', icon: 'pi pi-list' },
 ];
 const tab = ref('blocks');
@@ -308,36 +257,6 @@ function remove(b: any) {
       catch { toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Xóa thất bại', life: 3000 }); }
     },
   });
-}
-
-// ---- TAB banners (catalog) ----
-const bannerCtl = useCatalog('banners');
-const banners = bannerCtl.items;
-const bannerMeta = bannerCtl.meta;
-const bannerLoading = bannerCtl.loading;
-const loadBanners = bannerCtl.load;
-const bannerDlg = ref(false);
-const editingBanner = ref<any>(null);
-const bannerSaving = ref(false);
-const bannerForm = ref({ title: '', section: 'home', platform: 'web', sortOrder: 0, visibleFrom: null as any, visibleTo: null as any, isVisible: true, imageWeb: '', imageMobile: '' });
-
-function openBannerAdd() {
-  editingBanner.value = null;
-  bannerForm.value = { title: '', section: 'home', platform: 'web', sortOrder: 0, visibleFrom: null, visibleTo: null, isVisible: true, imageWeb: '', imageMobile: '' };
-  bannerDlg.value = true;
-}
-function openBannerEdit(b: any) {
-  editingBanner.value = b;
-  bannerForm.value = { title: b.title || '', section: b.section || 'home', platform: b.platform || 'web', sortOrder: b.sortOrder ?? 0, visibleFrom: toDate(b.visibleFrom), visibleTo: toDate(b.visibleTo), isVisible: b.isVisible !== false, imageWeb: b.imageWeb || '', imageMobile: b.imageMobile || '' };
-  bannerDlg.value = true;
-}
-async function saveBanner() {
-  bannerSaving.value = true;
-  const ok = await bannerCtl.saveItem(editingBanner.value?.id || null, {
-    ...bannerForm.value, visibleFrom: toIso(bannerForm.value.visibleFrom) || undefined, visibleTo: toIso(bannerForm.value.visibleTo) || undefined,
-  }, 'Đã lưu banner');
-  bannerSaving.value = false;
-  if (ok) { bannerDlg.value = false; loadBanners(); }
 }
 
 // ---- TAB rails: khối giao diện theo mục (giống CMS VTCPlay) ----
@@ -483,7 +402,6 @@ async function onRailDrop(i: number) {
 }
 
 watch(tab, (t) => {
-  if (t === 'banners') loadBanners();
   if (t === 'rails') { loadCats(); loadRails(); }
 });
 watch([railSection, railPlatform], () => { if (tab.value === 'rails') loadRails(); });
