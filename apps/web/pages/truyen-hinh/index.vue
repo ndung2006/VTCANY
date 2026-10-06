@@ -105,6 +105,8 @@
 useHead({ title: 'Truyền hình - VTC ANY' });
 
 const config = useRuntimeConfig();
+const route = useRoute();
+const router = useRouter();
 const { loggedIn, token } = useAuth();
 
 interface Channel {
@@ -226,6 +228,8 @@ async function pick(c: Channel) {
   }
   clearRefresh();
   current.value = c;
+  // Dong bo URL de share/reload giu dung kenh dang xem.
+  router.replace({ query: { kenh: c.public_id } });
   epg.value = null;
   epgLoading.value = true;
   try {
@@ -241,5 +245,16 @@ async function pick(c: Channel) {
 watch(activeDate, () => {
   if (current.value) pick(current.value);
 });
+// Deep-link tu trang chu: /truyen-hinh?kenh=<public_id> -> tu dong chon + phat ngay.
+watch(
+  groups,
+  (g) => {
+    const q = route.query.kenh;
+    if (current.value || typeof q !== 'string' || !q) return;
+    const hit = g.flatMap((gr) => gr.channels).find((ch) => ch.public_id === q);
+    if (hit) void pick(hit);
+  },
+  { immediate: true },
+);
 onUnmounted(() => clearRefresh());
 </script>

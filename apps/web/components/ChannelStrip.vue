@@ -5,7 +5,7 @@
       <NuxtLink
         v-for="c in channels"
         :key="c.public_id"
-        to="/truyen-hinh"
+        :to="`/truyen-hinh?kenh=${c.public_id}`"
         class="flex h-20 w-32 shrink-0 items-center justify-center rounded-xl bg-white p-2 transition hover:ring-2 hover:ring-cyan-400"
         :title="c.name"
       >
