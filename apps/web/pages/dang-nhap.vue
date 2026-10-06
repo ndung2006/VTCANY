@@ -26,6 +26,16 @@
 
       <p v-if="notice" class="mt-3 text-sm" :class="noticeOk ? 'text-emerald-400' : 'text-amber-300'">{{ notice }}</p>
 
+      <!-- Dang nhap bang email/SDT + mat khau (mat khau do admin cap trong CMS) -->
+      <div class="mt-5 border-t border-neutral-800 pt-4 text-left">
+        <p class="mb-2 text-sm font-medium text-neutral-300">Đăng nhập bằng tài khoản</p>
+        <div class="flex flex-col gap-2">
+          <InputText v-model="identifier" placeholder="Email hoặc số điện thoại" class="w-full" />
+          <InputText v-model="password" type="password" placeholder="Mật khẩu" class="w-full" @keyup.enter="loginPassword" />
+          <Button label="Đăng nhập" class="w-full" :loading="pwBusy" :disabled="!identifier.trim() || !password" @click="loginPassword" />
+        </div>
+      </div>
+
       <details class="mt-5 text-left">
         <summary class="cursor-pointer text-xs text-neutral-500">Dành cho developer: đăng nhập bằng token</summary>
         <div class="mt-2 flex gap-2">
@@ -49,6 +59,31 @@ const notice = ref('');
 const noticeOk = ref(false);
 const paste = ref('');
 const googleBtnWrap = ref<HTMLElement | null>(null);
+const identifier = ref('');
+const password = ref('');
+const pwBusy = ref(false);
+
+async function loginPassword() {
+  const idf = identifier.value.trim();
+  if (!idf || !password.value) return;
+  pwBusy.value = true;
+  say('Đang đăng nhập…');
+  try {
+    const res = await $fetch<{ accessToken: string }>('/auth/user/login', {
+      baseURL: config.public.apiBase as string,
+      method: 'POST',
+      body: { identifier: idf, password: password.value },
+    });
+    login(res.accessToken);
+    say('Đăng nhập thành công.', true);
+    navigateTo('/');
+  } catch (e: any) {
+    const msg = e?.data || e?.message || '';
+    say(String(msg).includes('bi khoa') ? 'Tài khoản đã bị khóa. Liên hệ admin.' : 'Sai email/SĐT hoặc mật khẩu.');
+  } finally {
+    pwBusy.value = false;
+  }
+}
 
 function say(msg: string, ok = false) {
   notice.value = msg;

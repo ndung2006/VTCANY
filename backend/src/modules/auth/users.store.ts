@@ -68,6 +68,7 @@ const ROLE_PERMS: Record<Role, string[]> = {
     'category:read', 'category:create', 'category:update',
     'layout:read',
     'catalog:read', 'catalog:write',
+    'user:read',
   ],
 };
 

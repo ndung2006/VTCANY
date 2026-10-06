@@ -4,13 +4,15 @@ import * as bcrypt from 'bcryptjs';
 import { randomBytes, randomUUID } from 'crypto';
 import { END_USERS, EndUser, OAuthProvider, PROFILES, SESSIONS, USERS, CmsUser, Role, isOAuthProvider, permissionsFor } from './users.store';
 import { PrismaService } from '../../prisma/prisma.service';
+import { UsersService } from './users.service';
 
 const REFRESH_TTL_MS = 7 * 24 * 3600 * 1000;
 const ACCESS_TTL_S = 3600;
 
 // Admin CMS: uu tien Postgres (bang admin_users, seed tu USERS khi bang trong) de
 // doi mat khau ben vung qua restart; khong co DB (dev/test) thi dung store in-memory.
-// End-user OAuth van in-memory (users/user_profiles/user_sessions trong migration 0001).
+// End-user: DB-first qua UsersService (bang users); END_USERS in-memory chi la cache
+// phien lam viec, dong bo moi khi login (oauth hoac mat khau).
 @Injectable()
 export class AuthService implements OnModuleInit {
   private readonly logger = new Logger(AuthService.name);
@@ -21,6 +23,7 @@ export class AuthService implements OnModuleInit {
   constructor(
     private jwt: JwtService,
     @Optional() private prisma?: PrismaService,
+    @Optional() private users?: UsersService,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -145,13 +148,32 @@ export class AuthService implements OnModuleInit {
   }
 
   // ---- Bước 2: POST /auth/oauth/:provider {idToken} ----
+  // DB-first: upsert vao Postgres (ben vung, CMS quan ly duoc); khong co DB
+  // thi fallback store in-memory nhu cu. Ket qua luon duoc dong bo vao cache
+  // END_USERS de me()/refresh() chay binh thuong.
   async oauthLogin(provider: string, idToken: string) {
     if (!isOAuthProvider(provider)) throw new Error('unsupported provider (only google, facebook)');
     if (!idToken) throw new Error('missing idToken');
     const profile = await this.verifyIdToken(provider, idToken);
-    let user = END_USERS.find((u) => u.provider === provider && u.providerId === profile.providerId);
+    let user: EndUser | undefined;
+    if (this.users && process.env.DATABASE_URL) {
+      try {
+        const pub = await this.users.upsertOAuth({
+          provider,
+          providerId: profile.providerId,
+          email: profile.email,
+          avatar: profile.avatar,
+          displayName: profile.displayName,
+        });
+        user = this.syncEndUserCache(pub);
+      } catch (e: any) {
+        if (e?.code === 'forbidden') throw new Error('account banned');
+        this.logger.warn(`upsertOAuth DB loi, fallback in-memory: ${e?.message}`);
+      }
+    }
     if (!user) {
-      if (profile.email) {
+      user = END_USERS.find((u) => u.provider === provider && u.providerId === profile.providerId);
+      if (!user && profile.email) {
         user = END_USERS.find((u) => (u.email || '').toLowerCase() === profile.email!.toLowerCase());
       }
     }
@@ -171,6 +193,40 @@ export class AuthService implements OnModuleInit {
     }
     if (user.status !== 'active') throw new Error('account banned');
     return this.issueEnduserPair(user);
+  }
+
+  // Dang nhap app bang email/SDT + mat khau (mat khau do admin cap trong CMS).
+  async userPasswordLogin(identifier: string, password: string) {
+    if (!this.users || !process.env.DATABASE_URL) throw new Error('chua cau hinh CSDL nguoi dung');
+    const pub = await this.users.verifyPasswordLogin(identifier, password);
+    return this.issueEnduserPair(this.syncEndUserCache(pub));
+  }
+
+  // Dong bo user tu DB vao cache END_USERS in-memory.
+  private syncEndUserCache(pub: {
+    id: string; email?: string | null; phone?: string | null; avatar?: string | null;
+    displayName?: string | null; provider?: string | null; providerId?: string | null;
+    status: string; createdAt: string;
+  }): EndUser {
+    let cached = END_USERS.find((u) => u.id === pub.id);
+    if (!cached) {
+      cached = {
+        id: pub.id, email: pub.email || undefined, phone: pub.phone || undefined,
+        avatar: pub.avatar || undefined, displayName: pub.displayName || undefined,
+        provider: (pub.provider as OAuthProvider) || undefined,
+        providerId: pub.providerId || undefined,
+        status: pub.status === 'banned' ? 'banned' : 'active',
+        createdAt: pub.createdAt,
+      };
+      END_USERS.push(cached);
+    } else {
+      cached.email = pub.email || undefined;
+      cached.phone = pub.phone || undefined;
+      cached.avatar = pub.avatar || undefined;
+      cached.displayName = pub.displayName || undefined;
+      cached.status = pub.status === 'banned' ? 'banned' : 'active';
+    }
+    return cached;
   }
 
   // ---- Bước 2: GET /auth/me ----

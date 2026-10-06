@@ -186,7 +186,10 @@ model User {
   email        String?        @unique
   phone        String?        @unique
   avatar       String?
+  displayName  String?        @map("display_name")
+  passwordHash String?        @map("password_hash") // dang nhap bang mat khau (admin cap/dat lai)
   provider     String? // google|facebook
+  providerId   String?        @map("provider_id")
   status       String         @default("active") // active|banned
   createdAt    DateTime       @default(now()) @map("created_at")
   profiles     UserProfile[]

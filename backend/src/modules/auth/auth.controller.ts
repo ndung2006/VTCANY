@@ -60,6 +60,20 @@ export class AuthController {
     }
   }
 
+  // POST /api/v1/auth/user/login {identifier, password} — app dang nhap bang
+  // email/SDT + mat khau (mat khau do admin cap/dat lai trong CMS).
+  @UseGuards(RateLimitGuard)
+  @Post('user/login')
+  async userLogin(@Body() dto: { identifier?: string; password?: string }) {
+    try {
+      return await this.auth.userPasswordLogin(dto.identifier || '', dto.password || '');
+    } catch (e: any) {
+      const msg = e?.message || 'login failed';
+      if (msg.includes('tai khoan bi khoa')) throw new HttpException(msg, HttpStatus.FORBIDDEN);
+      throw new HttpException('invalid credentials', HttpStatus.UNAUTHORIZED);
+    }
+  }
+
   // Bước 2: POST /api/v1/auth/oauth/:provider {idToken} — web chỉ dùng OAuth.
   @UseGuards(RateLimitGuard)
   @Post('oauth/:provider')
