@@ -3,7 +3,7 @@
     <div class="flex items-center gap-3">
       <input ref="fileInput" type="file" accept="video/*" class="hidden" @change="onPick" />
       <Button label="Chọn file video" icon="pi pi-upload" severity="secondary" :disabled="busy" @click="fileInput?.click()" />
-      <span class="text-sm text-neutral-400">{{ fileName || 'Tối đa 500MB, định dạng video/*' }}</span>
+      <span class="text-sm text-neutral-400">{{ fileName || 'Tối đa 10GB, định dạng video/*' }}</span>
     </div>
     <ProgressBar v-if="busy || progress > 0" :value="progress" class="h-2" />
     <p v-if="phase" class="text-sm" :class="phaseClass">{{ phase }}</p>
@@ -27,13 +27,13 @@ const phaseClass = ref('text-neutral-400');
 const uploadId = ref('');
 const doneVideoId = ref('');
 const CHUNK = 5 * 1024 * 1024;
-const MAX = 500 * 1024 * 1024;
+const MAX = 10 * 1024 * 1024 * 1024; // 10GB — khop MAX_FILE_BYTES backend
 
 function onPick(e: Event) {
   const f = (e.target as HTMLInputElement).files?.[0];
   if (!f) return;
   if (!f.type.startsWith('video/')) { setPhase('Chỉ chấp nhận file video.', 'text-red-400'); return; }
-  if (f.size > MAX) { setPhase('File vượt quá 500MB.', 'text-red-400'); return; }
+  if (f.size > MAX) { setPhase('File vượt quá 10GB.', 'text-red-400'); return; }
   file.value = f;
   fileName.value = `${f.name} (${(f.size / 1048576).toFixed(1)}MB)`;
   setPhase('Đã chọn file, nhấn "Bắt đầu upload".', 'text-neutral-400');
