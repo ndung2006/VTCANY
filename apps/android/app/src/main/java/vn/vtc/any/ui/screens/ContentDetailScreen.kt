@@ -75,7 +75,7 @@ fun ContentDetailScreen(
             Column(Modifier.fillMaxSize()) {
                 Box(
                     Modifier.fillMaxWidth()
-                        .aspectRatio(if (isShort) 9f / 12f else 16f / 9f),
+                        .aspectRatio(if (isShort) 9f / 16f else 16f / 9f),
                 ) {
                     AsyncImage(
                         model = it.thumbnail ?: it.poster,
