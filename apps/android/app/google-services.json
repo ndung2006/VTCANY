@@ -1,1 +1,29 @@
-{"client":[{"api_key":[{"current_key":"PLACEHOLDER_API_KEY"}],"client_info":{"android_client_info":{"package_name":"vn.vtc.any"},"mobilesdk_app_id":"1:000000000000:android:0000000000000000000000"},"oauth_client":[],"services":{"appinvite_service":{"other_platform_oauth_client":[]}}}],"configuration_version":"1","project_info":{"project_id":"vtc-any-placeholder","project_number":"000000000000","storage_bucket":"vtc-any-placeholder.appspot.com"}}
+{
+  "project_info": {
+    "project_number": "834852259003",
+    "project_id": "vtcany-316e9",
+    "storage_bucket": "vtcany-316e9.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:834852259003:android:a9123be23685361161559e",
+        "android_client_info": {
+          "package_name": "vn.vtc.any"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAaxdQIRLLw-iP8veQ19MEzYybM2SEFP8I"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
