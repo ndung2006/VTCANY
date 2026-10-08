@@ -20,7 +20,20 @@ android {
         vectorDrawables { useSupportLibrary = true }
     }
 
+    // Keystore debug cố định trong workspace (sống qua VM restart),
+    // để các bản build sau cài đè được mà không xung đột chữ ký.
+    signingConfigs {
+        getByName("debug") {
+            storeFile = file(System.getenv("VTC_DEBUG_KEYSTORE") ?: "/home/hatch/workspace/android-debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
     buildTypes {
+        debug {
+            signingConfig = signingConfigs.getByName("debug")
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(
