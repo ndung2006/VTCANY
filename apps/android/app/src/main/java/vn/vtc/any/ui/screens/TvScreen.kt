@@ -52,6 +52,7 @@ import vn.vtc.any.ui.components.ChannelLogo
 import vn.vtc.any.ui.components.ErrorBox
 import vn.vtc.any.ui.components.LoadingBox
 import vn.vtc.any.playback.RadioPlayer
+import vn.vtc.any.playback.RadioControl
 import vn.vtc.any.ui.player.VideoPlayer
 
 /** Trước khi link hết hạn 30 phút thì xin link mới (giống web: 210/240 phút). */
@@ -211,6 +212,8 @@ fun TvScreen(initialChannelId: String? = null) {
                         selected = isSel,
                         onClick = {
                             if (!isSel) {
+                                // Chuyển sang kênh hình thì dừng radio đang phát nền.
+                                if (!ch.audioOnly) RadioControl.stop()
                                 selected = ch
                                 date = null
                             }

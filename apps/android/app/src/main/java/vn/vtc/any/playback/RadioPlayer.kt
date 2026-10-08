@@ -30,21 +30,47 @@ import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import vn.vtc.any.ui.components.ChannelLogo
 
+/**
+ * Giữ controller radio đang hoạt động để có thể dừng từ nơi khác
+ * (vd: chuyển sang kênh TV thì dừng radio đang phát nền).
+ */
+object RadioControl {
+    var controller: MediaController? = null
+        private set
+
+    internal fun attach(c: MediaController) { controller = c }
+    internal fun detach(c: MediaController) { if (controller === c) controller = null }
+
+    fun stop() {
+        runCatching {
+            controller?.let {
+                if (it.isPlaying) it.pause()
+                it.stop()
+                it.clearMediaItems()
+            }
+        }
+    }
+}
+
 /** Kết nối tới VtcRadioService qua MediaController. */
 @Composable
-fun rememberRadioController(): MediaController? {
-    val context = LocalContext.current
+fun rememberRadioController(): MediaController? {    val context = LocalContext.current
     var controller by remember { mutableStateOf<MediaController?>(null) }
 
     DisposableEffect(Unit) {
         val token = SessionToken(context, ComponentName(context, VtcRadioService::class.java))
         val future = MediaController.Builder(context, token).buildAsync()
         future.addListener(
-            { runCatching { controller = future.get() } },
+            {
+                runCatching { future.get() }.onSuccess {
+                    controller = it
+                    RadioControl.attach(it)
+                }
+            },
             ContextCompat.getMainExecutor(context),
         )
         onDispose {
-            runCatching { controller?.release() }
+            runCatching { controller?.let { RadioControl.detach(it); it.release() } }
             MediaController.releaseFuture(future)
             controller = null
         }
