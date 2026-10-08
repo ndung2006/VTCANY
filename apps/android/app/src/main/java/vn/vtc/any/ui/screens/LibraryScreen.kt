@@ -75,10 +75,34 @@ fun LibraryScreen(
         activeCategory = null
         runCatching {
             val banners = app.repo.sectionBanners(section).data
-            val rails = app.repo.sectionRails(section).data
+            var rails = app.repo.sectionRails(section).data
             val categories = app.api
                 .categories(SECTION_CATEGORY_TYPES[section])
                 .data
+            // Fallback: nếu rails CMS rỗng (chưa gắn nội dung), lấy trực tiếp từ catalog.
+            if (rails.none { it.items.isNotEmpty() }) {
+                val items = when (section) {
+                    "movies" -> app.api.movies(limit = 24).data
+                    "video" -> app.api.videos(limit = 24).data
+                    "short" -> app.api.shorts(limit = 24).data
+                    "entertainment" -> app.api.videos(limit = 24).data
+                    else -> emptyList()
+                }
+                if (items.isNotEmpty()) {
+                    rails = listOf(
+                        Rail(
+                            id = "fallback-$section",
+                            title = "Mới nhất",
+                            contentType = when (section) {
+                                "movies" -> "movie"
+                                "short" -> "short"
+                                else -> "video"
+                            },
+                            items = items,
+                        )
+                    )
+                }
+            }
             LibraryData(banners, rails, categories)
         }.onSuccess { data = it; loading = false }
             .onFailure { error = ApiClient.errorMessage(it); loading = false }
