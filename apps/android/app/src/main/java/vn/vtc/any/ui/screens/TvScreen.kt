@@ -51,6 +51,7 @@ import vn.vtc.any.data.api.TimelineItem
 import vn.vtc.any.ui.components.ChannelLogo
 import vn.vtc.any.ui.components.ErrorBox
 import vn.vtc.any.ui.components.LoadingBox
+import vn.vtc.any.playback.RadioPlayer
 import vn.vtc.any.ui.player.VideoPlayer
 
 /** Trước khi link hết hạn 30 phút thì xin link mới (giống web: 210/240 phút). */
@@ -131,7 +132,18 @@ fun TvScreen(initialChannelId: String? = null) {
                     }
                 }
                 !hlsUrl.isNullOrBlank() -> {
-                    VideoPlayer(url = hlsUrl!!, modifier = Modifier.fillMaxSize())
+                    val ch = selected
+                    if (ch != null && ch.audioOnly) {
+                        // Kênh phát thanh: phát nền qua service, hiện khung điều khiển gọn.
+                        RadioPlayer(
+                            url = hlsUrl!!,
+                            channelName = ch.name,
+                            channelLogo = ch.logo,
+                            modifier = Modifier.fillMaxSize().padding(16.dp),
+                        )
+                    } else {
+                        VideoPlayer(url = hlsUrl!!, modifier = Modifier.fillMaxSize())
+                    }
                 }
                 !epgLoading -> {
                     Text(
