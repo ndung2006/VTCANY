@@ -21,8 +21,10 @@ export interface AioChannel {
 }
 
 // Audio-only (VOV1/VOV3): preset khong co p360/p480/p720.
+// Check ca hlsTranscode (cu) va hlsTranscodeRotating (moi) vi scan hien tai
+// chi con rotating.
 export function isAudioOnly(c: AioChannel): boolean {
-  const presets = (c.hlsTranscode || []).map((t) => t.preset);
+  const presets = [...(c.hlsTranscode || []), ...(c.hlsTranscodeRotating || [])].map((t) => t.preset);
   return presets.length > 0 && presets.every((p) => !/^p\d+$/i.test(p));
 }
 

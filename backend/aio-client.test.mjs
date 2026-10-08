@@ -95,3 +95,12 @@ test('epg schedule passes through unknown shapes as empty', async () => {
   assert.deepEqual(mapEpgSchedule({ foo: 1 }), []);
   assert.deepEqual(mapEpgSchedule(null), []);
 });
+
+test('isAudioOnly: nhan dien qua hlsTranscodeRotating (scan moi)', async () => {
+  const { isAudioOnly } = await import('./dist/modules/playback/aio-client.js');
+  assert.equal(isAudioOnly({ name: 'VOV1', hlsTranscodeRotating: [{ preset: 'paudio', hls: 'x' }] }), true);
+  assert.equal(isAudioOnly({ name: 'VOV1', hlsTranscodeRotating: [{ preset: 'tc-paudio', hls: 'x' }] }), true);
+  assert.equal(isAudioOnly({ name: 'LAICHAU', hlsTranscodeRotating: [{ preset: 'p720', hls: 'x' }] }), false);
+  assert.equal(isAudioOnly({ name: 'LAICHAU', hlsTranscode: [{ preset: 'p720', hls: 'x' }] }), false);
+  assert.equal(isAudioOnly({ name: 'X', hlsTranscodeRotating: [] }), false);
+});

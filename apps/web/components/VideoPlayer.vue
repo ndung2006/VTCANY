@@ -10,6 +10,7 @@
     <video
       ref="videoEl"
       class="h-full w-full"
+      :class="background ? 'opacity-0' : ''"
       playsinline
       :poster="poster"
       @canplay="loading = false"
@@ -21,6 +22,16 @@
       @loadedmetadata="onLoadedMeta"
       @volumechange="onVolumeChange"
       @click.stop
+    />
+
+    <!-- Background co dinh cho kenh radio (audio-only): poster chi hien truoc
+         khi phat, con anh nay giu suot thoi gian nghe. Video element van chay
+         ngam de phat tieng, cac control tu che nam tren cung. -->
+    <img
+      v-if="background"
+      :src="background"
+      alt=""
+      class="pointer-events-none absolute inset-0 h-full w-full object-cover"
     />
 
     <div v-if="loading" class="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/40">
@@ -132,7 +143,7 @@ import Hls from 'hls.js';
 // aspect: '16/9' (mac dinh) hoac '9/16' cho short doc.
 // autoplay: bam kenh la phat luon (trang truyen hinh). Trinh duyet chan
 // autoplay co tieng khi khong co user activation -> tu fallback sang mute.
-const props = defineProps<{ src: string; poster?: string; aspect?: string; autoplay?: boolean }>();
+const props = defineProps<{ src: string; poster?: string; aspect?: string; autoplay?: boolean; background?: string }>();
 const emit = defineEmits<{ (e: 'ended'): void }>();
 
 const containerEl = ref<HTMLElement | null>(null);

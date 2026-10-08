@@ -4,7 +4,7 @@
     <div class="min-w-0 flex-1">
       <div class="overflow-hidden rounded-xl bg-black">
         <div v-if="current && epg?.channel.hls_url" class="aspect-video">
-          <VideoPlayer :key="current.public_id + '-' + playerKey" :src="epg.channel.hls_url" autoplay />
+          <VideoPlayer :key="current.public_id + '-' + playerKey" :src="epg.channel.hls_url" autoplay :background="radioBg" />
         </div>
         <div v-else class="flex aspect-video flex-col items-center justify-center gap-3 bg-black">
           <span class="flex h-16 w-16 items-center justify-center rounded-full bg-neutral-800">
@@ -114,6 +114,7 @@ interface Channel {
   name: string;
   logo: string | null;
   audio_only: boolean;
+  banner_url: string | null;
 }
 
 const { data: groupsData, pending } = await useFetch('/channels', {
@@ -155,6 +156,11 @@ const dates = computed(() => {
 const activeDate = ref(todayIso);
 
 const current = ref<Channel | null>(null);
+// Background co dinh cho kenh radio: chi khi kenh audio-only va admin da up
+// anh banner trong CMS > Truyen hinh > Kenh ("Anh banner player 16:9").
+const radioBg = computed(() =>
+  current.value?.audio_only && current.value?.banner_url ? current.value.banner_url : undefined,
+);
 const epg = ref<{
   channel: { hls_url: string | null; hls_exp?: number | null };
   timeline: Array<{ time: string; title: string; status: string }>;
