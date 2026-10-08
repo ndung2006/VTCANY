@@ -92,7 +92,7 @@ fun ContentCard(
             .clickable(onClick = onClick),
     ) {
         AsyncImage(
-            model = item.poster ?: item.thumbnail,
+            model = item.poster?.ifBlank { null } ?: item.thumbnail?.ifBlank { null },
             contentDescription = item.title,
             contentScale = ContentScale.Crop,
             modifier = Modifier
