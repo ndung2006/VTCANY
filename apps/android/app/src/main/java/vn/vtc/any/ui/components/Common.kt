@@ -31,6 +31,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -234,5 +238,37 @@ fun BannerCarousel(
                 }
             }
         }
+    }
+}
+
+// ---------- Logo kênh (có fallback chữ cái khi thiếu/lỗi) ----------
+@Composable
+fun ChannelLogo(
+    logoUrl: String?,
+    name: String,
+    modifier: Modifier = Modifier,
+) {
+    var loadFailed by remember(logoUrl) { mutableStateOf(false) }
+    if (logoUrl.isNullOrBlank() || loadFailed) {
+        Box(
+            modifier = modifier
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.primaryContainer),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = name.firstOrNull()?.uppercase() ?: "?",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+            )
+        }
+    } else {
+        AsyncImage(
+            model = logoUrl,
+            contentDescription = name,
+            contentScale = ContentScale.Fit,
+            modifier = modifier.clip(CircleShape),
+            onError = { loadFailed = true },
+        )
     }
 }

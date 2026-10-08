@@ -42,6 +42,7 @@ import vn.vtc.any.data.api.Channel
 import vn.vtc.any.data.api.Rail
 import vn.vtc.any.data.repo.DeepTarget
 import vn.vtc.any.ui.components.BannerCarousel
+import vn.vtc.any.ui.components.ChannelLogo
 import vn.vtc.any.ui.components.EmptyBox
 import vn.vtc.any.ui.components.ErrorBox
 import vn.vtc.any.ui.components.LoadingBox
@@ -143,12 +144,10 @@ private fun HomeContent(
                                     .clickable { onOpenChannel(ch) }
                                     .padding(4.dp),
                             ) {
-                                AsyncImage(
-                                    model = ch.logo,
-                                    contentDescription = ch.name,
-                                    contentScale = ContentScale.Fit,
-                                    modifier = Modifier.size(56.dp)
-                                        .clip(CircleShape),
+                                ChannelLogo(
+                                    logoUrl = ch.logo,
+                                    name = ch.name,
+                                    modifier = Modifier.size(56.dp),
                                 )
                                 Spacer(Modifier.height(4.dp))
                                 Text(
@@ -221,11 +220,10 @@ fun ChannelStrip(
                 modifier = Modifier.width(64.dp)
                     .clickable { onOpenChannel(ch) },
             ) {
-                AsyncImage(
-                    model = ch.logo,
-                    contentDescription = ch.name,
-                    contentScale = ContentScale.Fit,
-                    modifier = Modifier.size(52.dp).clip(CircleShape),
+                ChannelLogo(
+                    logoUrl = ch.logo,
+                    name = ch.name,
+                    modifier = Modifier.size(52.dp),
                 )
                 Text(
                     ch.name,

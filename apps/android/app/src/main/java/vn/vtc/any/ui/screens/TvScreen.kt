@@ -48,6 +48,7 @@ import vn.vtc.any.data.api.Channel
 import vn.vtc.any.data.api.ChannelGroup
 import vn.vtc.any.data.api.EpgResponse
 import vn.vtc.any.data.api.TimelineItem
+import vn.vtc.any.ui.components.ChannelLogo
 import vn.vtc.any.ui.components.ErrorBox
 import vn.vtc.any.ui.components.LoadingBox
 import vn.vtc.any.ui.player.VideoPlayer
@@ -150,11 +151,10 @@ fun TvScreen(initialChannelId: String? = null) {
                 Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                AsyncImage(
-                    model = ch.logo,
-                    contentDescription = ch.name,
-                    contentScale = ContentScale.Fit,
-                    modifier = Modifier.size(40.dp).clip(CircleShape),
+                ChannelLogo(
+                    logoUrl = ch.logo,
+                    name = ch.name,
+                    modifier = Modifier.size(40.dp),
                 )
                 Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f)) {
