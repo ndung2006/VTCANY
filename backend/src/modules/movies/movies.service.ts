@@ -74,7 +74,7 @@ export class MoviesService {
         episode_number: n,
         title: e.title || e.name || `Tập ${n}`,
         thumbnail: e.thumbnail || '',
-        duration: e.duration ? String(e.duration) : '',
+        duration: e.duration ? String(e.duration) : null,
         description: e.description || '',
         hls_url,
       });

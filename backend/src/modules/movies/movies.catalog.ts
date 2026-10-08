@@ -10,7 +10,7 @@ export interface EpisodeRec {
   episode_number: number;
   title: string;
   thumbnail: string;
-  duration: string;
+  duration: string | null;
   description: string;
   hls_url: string;
 }

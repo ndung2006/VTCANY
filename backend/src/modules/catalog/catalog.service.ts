@@ -223,7 +223,7 @@ export function toPublicItem(item: any): any {
     description: item.description || '',
     thumbnail: item.thumbnail || item.thumbnailUrl || '',
     poster: item.posterUrl || '',
-    duration: item.duration ?? null,
+    duration: item.duration || null, // "" -> null: hop dong API thong nhat, client khoi phai doan kieu
     ageLimit: item.ageLimit ?? null,
     planId: item.planId ?? null,
     publishedAt: item.publishedAt ?? null,
