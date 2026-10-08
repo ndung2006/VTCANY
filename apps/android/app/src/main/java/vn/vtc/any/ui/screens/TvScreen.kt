@@ -140,7 +140,8 @@ fun TvScreen(initialChannelId: String? = null) {
                             url = hlsUrl!!,
                             channelName = ch.name,
                             channelLogo = ch.logo,
-                            modifier = Modifier.fillMaxSize().padding(16.dp),
+                            bannerUrl = epg?.channel?.bannerUrl,
+                            modifier = Modifier.fillMaxSize(),
                         )
                     } else {
                         VideoPlayer(url = hlsUrl!!, modifier = Modifier.fillMaxSize())

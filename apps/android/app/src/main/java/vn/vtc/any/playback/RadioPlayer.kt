@@ -1,8 +1,11 @@
 package vn.vtc.any.playback
 
 import android.content.ComponentName
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Pause
@@ -87,6 +90,7 @@ fun RadioPlayer(
     url: String,
     channelName: String,
     channelLogo: String?,
+    bannerUrl: String? = null,
     modifier: Modifier = Modifier,
 ) {
     val controller = rememberRadioController()
@@ -124,35 +128,52 @@ fun RadioPlayer(
         onDispose { c.removeListener(listener) }
     }
 
-    Row(
-        modifier = modifier,
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        ChannelLogo(
-            logoUrl = channelLogo,
-            name = channelName,
-            modifier = Modifier.size(56.dp),
-        )
-        Text(
-            text = channelName,
-            style = MaterialTheme.typography.titleMedium,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f),
-        )
-        IconButton(
-            onClick = {
-                val c = controller ?: return@IconButton
-                if (c.isPlaying) c.pause() else c.play()
-            },
-            modifier = Modifier.size(56.dp),
-        ) {
-            Icon(
-                imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                contentDescription = if (isPlaying) "Tạm dừng" else "Phát",
-                modifier = Modifier.size(36.dp),
+    // Nền: ảnh banner từ BE phủ mờ tối; fallback giữ nền của parent.
+    Box(modifier = modifier) {
+        if (!bannerUrl.isNullOrBlank()) {
+            androidx.compose.foundation.Image(
+                painter = coil.compose.rememberAsyncImagePainter(bannerUrl),
+                contentDescription = null,
+                contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                modifier = Modifier.matchParentSize(),
             )
+            Box(
+                Modifier.matchParentSize()
+                    .background(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.55f)),
+            )
+        }
+        Row(
+            modifier = Modifier.matchParentSize().padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            ChannelLogo(
+                logoUrl = channelLogo,
+                name = channelName,
+                modifier = Modifier.size(56.dp),
+            )
+            Text(
+                text = channelName,
+                style = MaterialTheme.typography.titleMedium,
+                color = androidx.compose.ui.graphics.Color.White,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            IconButton(
+                onClick = {
+                    val c = controller ?: return@IconButton
+                    if (c.isPlaying) c.pause() else c.play()
+                },
+                modifier = Modifier.size(56.dp),
+            ) {
+                Icon(
+                    imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                    contentDescription = if (isPlaying) "Tạm dừng" else "Phát",
+                    tint = androidx.compose.ui.graphics.Color.White,
+                    modifier = Modifier.size(36.dp),
+                )
+            }
         }
     }
 }
