@@ -1,7 +1,54 @@
 package vn.vtc.any.data.api
 
+import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.descriptors.PrimitiveKind
+import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
+import kotlinx.serialization.descriptors.SerialDescriptor
+import kotlinx.serialization.encoding.Decoder
+import kotlinx.serialization.encoding.Encoder
+import kotlinx.serialization.json.JsonDecoder
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.doubleOrNull
+import kotlinx.serialization.json.jsonPrimitive
+
+/**
+ * duration từ API có thể là số, chuỗi số, chuỗi rỗng "" hoặc null.
+ * Serializer này chịu được tất cả, trả null khi không parse được.
+ */
+object LenientDoubleSerializer : KSerializer<Double?> {
+    override val descriptor: SerialDescriptor =
+        PrimitiveSerialDescriptor("LenientDouble", PrimitiveKind.DOUBLE)
+
+    override fun deserialize(decoder: Decoder): Double? {
+        val jsonDecoder = decoder as? JsonDecoder
+            ?: return runCatching { decoder.decodeDouble() }.getOrNull()
+        val el = jsonDecoder.decodeJsonElement()
+        if (el is JsonNull) return null
+        val prim = el.jsonPrimitive
+        if (prim.isString) {
+            val s = prim.content.trim()
+            if (s.isEmpty()) return null
+            // Chuỗi dạng "45:00" (mm:ss) -> đổi ra giây.
+            if (":" in s) {
+                val parts = s.split(":").mapNotNull { it.toDoubleOrNull() }
+                if (parts.isNotEmpty()) {
+                    return parts.foldIndexed(0.0) { i, acc, v ->
+                        acc + v * Math.pow(60.0, (parts.size - 1 - i).toDouble())
+                    }
+                }
+                return null
+            }
+            return s.toDoubleOrNull()
+        }
+        return prim.doubleOrNull
+    }
+
+    override fun serialize(encoder: Encoder, value: Double?) {
+        if (value == null) encoder.encodeNull() else encoder.encodeDouble(value)
+    }
+}
 
 // ---------- Phân trang ----------
 @Serializable
@@ -27,7 +74,8 @@ data class CatalogItem(
     val description: String? = null,
     val thumbnail: String? = null,
     val poster: String? = null,
-    // duration có thể là số (giây) hoặc null; với episode là chuỗi "45:00" (DTO riêng)
+    // duration có thể là số (giây), chuỗi số, chuỗi rỗng "" hoặc null
+    @Serializable(with = LenientDoubleSerializer::class)
     val duration: Double? = null,
     @SerialName("ageLimit") val ageLimit: String? = null,
     @SerialName("publishedAt") val publishedAt: String? = null,

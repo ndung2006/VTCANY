@@ -117,7 +117,8 @@ object ApiClient {
             t is java.net.SocketTimeoutException -> "Kết nối quá chậm, thử lại"
             retrofit?.code() == 401 -> "Phiên đăng nhập hết hạn"
             retrofit?.code() == 404 -> "Không tìm thấy nội dung"
-            else -> "Có lỗi xảy ra, thử lại sau"
+            else -> "Có lỗi xảy ra, thử lại sau" +
+                (if (vn.vtc.any.BuildConfig.DEBUG) "\n[${t::class.simpleName}: ${t.message?.take(200)}]" else "")
         }
     }
 }
