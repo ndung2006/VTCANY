@@ -25,6 +25,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -43,6 +44,7 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import kotlinx.coroutines.delay
 import vn.vtc.any.VtcAnyApp
+import vn.vtc.any.data.api.API_BASE_URL
 import vn.vtc.any.data.api.ApiClient
 import vn.vtc.any.data.api.Channel
 import vn.vtc.any.data.api.ChannelGroup
@@ -71,6 +73,9 @@ fun TvScreen(initialChannelId: String? = null) {
     var epgError by remember { mutableStateOf<String?>(null) }
     var date by remember { mutableStateOf<String?>(null) }
     var retryKey by remember { mutableStateOf(0) }
+    // Che do xem lai (VOD timeshift): phat URL nay thay vi link live.
+    var replaySrc by remember { mutableStateOf<String?>(null) }
+    var replayTitle by remember { mutableStateOf<String?>(null) }
 
     // Tải danh sách kênh 1 lần.
     LaunchedEffect(Unit) {
@@ -100,6 +105,8 @@ fun TvScreen(initialChannelId: String? = null) {
     // Tự xin lại link trước khi hết hạn (chỉ khi vẫn đang xem đúng kênh).
     val hlsUrl = epg?.channel?.hlsUrl
     val hlsExp = epg?.channel?.hlsExp
+    // Khi xem lai thi player phat VOD timeshift thay vi live.
+    val playUrl = replaySrc ?: hlsUrl
     val channelId = selected?.publicId
     LaunchedEffect(channelId, hlsExp) {
         val exp = hlsExp ?: return@LaunchedEffect
@@ -125,16 +132,19 @@ fun TvScreen(initialChannelId: String? = null) {
             contentAlignment = Alignment.Center,
         ) {
             when {
-                epgLoading && hlsUrl == null -> {
+                epgLoading && playUrl == null -> {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         CircularProgressIndicator(color = Color.White)
                         Spacer(Modifier.height(8.dp))
                         Text("Đang tải luồng phát...", color = Color.White.copy(alpha = 0.8f))
                     }
                 }
-                !hlsUrl.isNullOrBlank() -> {
+                !playUrl.isNullOrBlank() -> {
                     val ch = selected
-                    if (ch != null && ch.audioOnly) {
+                    if (replaySrc != null) {
+                        // Xem lai la VOD (co tua), luon dung VideoPlayer ke ca kenh radio.
+                        VideoPlayer(url = replaySrc!!, modifier = Modifier.fillMaxSize())
+                    } else if (ch != null && ch.audioOnly) {
                         // Kênh phát thanh: phát nền qua service, hiện khung điều khiển gọn.
                         RadioPlayer(
                             url = hlsUrl!!,
@@ -173,15 +183,31 @@ fun TvScreen(initialChannelId: String? = null) {
                 Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f)) {
                     Text(ch.name, style = MaterialTheme.typography.titleMedium)
-                    val liveTitle = epg?.timeline?.find { it.status == "LIVE" }?.title
-                    if (liveTitle != null) {
-                        Text(
-                            "Đang phát: $liveTitle",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
+                    if (replaySrc != null) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                "Đang xem lại: ${replayTitle ?: ""}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f, fill = false),
+                            )
+                            TextButton(onClick = { replaySrc = null; replayTitle = null }) {
+                                Text("Về trực tiếp")
+                            }
+                        }
+                    } else {
+                        val liveTitle = epg?.timeline?.find { it.status == "LIVE" }?.title
+                        if (liveTitle != null) {
+                            Text(
+                                "Đang phát: $liveTitle",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
                     }
                 }
                 if (ch.audioOnly) {
@@ -217,6 +243,8 @@ fun TvScreen(initialChannelId: String? = null) {
                                 if (!ch.audioOnly) RadioControl.stop()
                                 selected = ch
                                 date = null
+                                replaySrc = null
+                                replayTitle = null
                             }
                         },
                         label = { Text(ch.name, maxLines = 1) },
@@ -233,6 +261,14 @@ fun TvScreen(initialChannelId: String? = null) {
             loading = epgLoading,
             selectedDate = date,
             onDateSelect = { date = it },
+            onReplay = { item ->
+                // replay_url tra ve dang tuong doi: ghep voi API base thanh URL day du.
+                val rp = item.replayUrl
+                if (!rp.isNullOrBlank()) {
+                    replayTitle = item.title
+                    replaySrc = API_BASE_URL.trimEnd('/') + rp
+                }
+            },
             modifier = Modifier.weight(1f),
         )
     }
@@ -244,6 +280,7 @@ private fun EpgTimeline(
     loading: Boolean,
     selectedDate: String?,
     onDateSelect: (String?) -> Unit,
+    onReplay: (TimelineItem) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier.fillMaxWidth()) {
@@ -289,7 +326,7 @@ private fun EpgTimeline(
                     verticalArrangement = Arrangement.spacedBy(2.dp),
                 ) {
                     items(timeline) { item ->
-                        EpgRow(item, epgTimeToLocal(selectedDate, item.time))
+                        EpgRow(item, epgTimeToLocal(selectedDate, item.time), onReplay)
                     }
                 }
             }
@@ -298,7 +335,7 @@ private fun EpgTimeline(
 }
 
 @Composable
-private fun EpgRow(item: TimelineItem, displayTime: String) {
+private fun EpgRow(item: TimelineItem, displayTime: String, onReplay: (TimelineItem) -> Unit) {
     val isLive = item.status == "LIVE"
     Row(
         Modifier.fillMaxWidth()
@@ -337,6 +374,11 @@ private fun EpgRow(item: TimelineItem, displayTime: String) {
                     .background(MaterialTheme.colorScheme.error)
                     .padding(horizontal = 6.dp, vertical = 2.dp),
             )
+        }
+        if (!item.replayUrl.isNullOrBlank()) {
+            TextButton(onClick = { onReplay(item) }) {
+                Text("Xem lại")
+            }
         }
     }
 }

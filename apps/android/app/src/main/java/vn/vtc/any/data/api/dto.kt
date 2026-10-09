@@ -256,6 +256,8 @@ data class TimelineItem(
     val title: String = "",
     // LIVE | UPCOMING | REPLAY
     val status: String = "",
+    // URL xem lai (timeshift VOD), chi co khi kenh bat timeshift + status=REPLAY.
+    @SerialName("replay_url") val replayUrl: String? = null,
 )
 
 @Serializable
