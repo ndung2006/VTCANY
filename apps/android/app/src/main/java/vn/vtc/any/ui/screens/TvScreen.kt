@@ -289,7 +289,7 @@ private fun EpgTimeline(
                     verticalArrangement = Arrangement.spacedBy(2.dp),
                 ) {
                     items(timeline) { item ->
-                        EpgRow(item)
+                        EpgRow(item, epgTimeToLocal(selectedDate, item.time))
                     }
                 }
             }
@@ -298,7 +298,7 @@ private fun EpgTimeline(
 }
 
 @Composable
-private fun EpgRow(item: TimelineItem) {
+private fun EpgRow(item: TimelineItem, displayTime: String) {
     val isLive = item.status == "LIVE"
     Row(
         Modifier.fillMaxWidth()
@@ -311,7 +311,7 @@ private fun EpgRow(item: TimelineItem) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            item.time,
+            displayTime,
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = if (isLive) FontWeight.Bold else FontWeight.Normal,
             color = if (isLive) MaterialTheme.colorScheme.primary
@@ -345,4 +345,19 @@ private fun formatEpgDate(iso: String): String {
     // "2026-10-08" -> "08/10"
     val p = iso.split("-")
     return if (p.size == 3) "${p[2]}/${p[1]}" else iso
+}
+
+/**
+ * Đổi giờ EPG (API trả theo UTC, dạng "HH:mm") sang giờ máy.
+ * isoDate: "2026-10-08" (ngày đang xem, null = hôm nay).
+ */
+private fun epgTimeToLocal(isoDate: String?, utcTime: String): String {
+    return runCatching {
+        val dateStr = isoDate?.takeIf { it.matches(Regex("\\d{4}-\\d{2}-\\d{2}")) }
+            ?: java.time.LocalDate.now().toString()
+        val utc = java.time.LocalDateTime.parse("${dateStr}T${utcTime.trim()}:00")
+            .atZone(java.time.ZoneOffset.UTC)
+        val local = utc.withZoneSameInstant(java.time.ZoneId.systemDefault())
+        local.format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"))
+    }.getOrDefault(utcTime)
 }
