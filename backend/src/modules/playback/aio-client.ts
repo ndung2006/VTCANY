@@ -36,6 +36,13 @@ export interface EpgTimelineItem {
   endIso?: string;
 }
 
+// Gio hien thi EPG theo mui gio Viet Nam (server chay UTC nen getHours() bi lech).
+// Doi qua bien moi truong EPG_TIMEZONE neu can.
+const EPG_TZ = process.env.EPG_TIMEZONE || 'Asia/Ho_Chi_Minh';
+const epgTimeFmt = new Intl.DateTimeFormat('en-GB', {
+  hour: '2-digit', minute: '2-digit', hour12: false, timeZone: EPG_TZ,
+});
+
 // Map lich AIO (nhieu dang payload) ve timeline chuan. Khong map duoc -> [] (fallback local).
 export function mapEpgSchedule(data: any, now = Date.now()): EpgTimelineItem[] {
   const arr: any[] = Array.isArray(data)
@@ -52,7 +59,7 @@ export function mapEpgSchedule(data: any, now = Date.now()): EpgTimelineItem[] {
     const e = end ? new Date(end).getTime() : NaN;
     const status = Number.isFinite(s) && s > now ? 'UPCOMING' : Number.isFinite(e) && e < now ? 'REPLAY' : 'LIVE';
     const d = new Date(Number.isFinite(s) ? s : now);
-    const time = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+    const time = epgTimeFmt.format(d);
     out.push({
       time,
       title: String(title),

@@ -25,15 +25,20 @@ export function channelPublicId(name: string): string {
 }
 
 function toISODate(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  // Dung UTC getters vi date duoc dung tu Date.UTC (ngay VN).
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
 }
 
 // Cửa sổ EPG 5 ngày: hôm nay -3 .. hôm nay +1 (VD 26,27,28,Hôm nay,30).
+// Ngay "hom nay" tinh theo gio Viet Nam (server chay UTC).
 export function epgDateWindow(today = new Date()): string[] {
+  const vnToday = new Intl.DateTimeFormat('en-CA', {
+    year: 'numeric', month: '2-digit', day: '2-digit', timeZone: 'Asia/Ho_Chi_Minh',
+  }).format(today);
+  const [y, m, dd] = vnToday.split('-').map(Number);
   const out: string[] = [];
   for (let delta = -3; delta <= 1; delta++) {
-    const d = new Date(today);
-    d.setDate(d.getDate() + delta);
+    const d = new Date(Date.UTC(y, m - 1, dd + delta));
     out.push(toISODate(d));
   }
   return out;

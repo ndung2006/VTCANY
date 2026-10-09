@@ -96,6 +96,18 @@ test('epg schedule passes through unknown shapes as empty', async () => {
   assert.deepEqual(mapEpgSchedule(null), []);
 });
 
+test('epg time hien thi theo gio Viet Nam (+07), khong phu thuoc TZ server', async () => {
+  const { mapEpgSchedule } = await import('./dist/modules/playback/aio-client.js');
+  const now = new Date('2026-09-29T12:00:00Z').getTime();
+  const items = mapEpgSchedule(
+    { programs: [{ title: 'X', startTime: '2026-09-29T10:00:00Z', endTime: '2026-09-29T11:00:00Z' }] },
+    now,
+  );
+  assert.equal(items.length, 1);
+  assert.equal(items[0].time, '17:00'); // 10:00 UTC = 17:00 gio VN
+  assert.equal(items[0].startIso, '2026-09-29T10:00:00.000Z');
+});
+
 test('isAudioOnly: nhan dien qua hlsTranscodeRotating (scan moi)', async () => {
   const { isAudioOnly } = await import('./dist/modules/playback/aio-client.js');
   assert.equal(isAudioOnly({ name: 'VOV1', hlsTranscodeRotating: [{ preset: 'paudio', hls: 'x' }] }), true);

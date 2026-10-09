@@ -85,8 +85,10 @@ export class TvService {
 
   async epg(publicId: string, date?: string) {
     const name = await this.resolveName(publicId);
-    const today = new Date();
-    const todayIso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    // Ngay mac dinh theo gio Viet Nam (server chay UTC).
+    const todayIso = new Intl.DateTimeFormat('en-CA', {
+      year: 'numeric', month: '2-digit', day: '2-digit', timeZone: 'Asia/Ho_Chi_Minh',
+    }).format(new Date());
     const day = date || todayIso;
 
     const overrides = await this.loadOverrides();
@@ -145,7 +147,7 @@ export class TvService {
         dash_url: dashUrl,
         catchup_hls_url: catchupUrl,
       },
-      epg_dates: epgDateWindow(today),
+      epg_dates: epgDateWindow(),
       epg_source: fromAio ? 'aio' : 'local',
       timeline,
     };
