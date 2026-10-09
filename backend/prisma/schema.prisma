@@ -231,6 +231,7 @@ model AdminUser {
   username     String?    @unique
   passwordHash String     @map("password_hash")
   fullName     String?    @map("full_name")
+  avatarUrl    String?    @map("avatar_url")
   roleId       String?    @map("role_id")
   roleName     String?    @map("role_name")
   role         Role?      @relation(fields: [roleId], references: [id])
@@ -248,6 +249,7 @@ model Role {
   description String?
   permissions Json // {"movies":["view","create","update","delete","approve"],...}
   admins      AdminUser[]
+  createdAt   DateTime    @default(now()) @map("created_at")
 
   @@map("roles")
 }

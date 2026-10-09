@@ -152,6 +152,8 @@ const groups = [
       { to: '/livestream', label: 'Livestream', icon: 'pi-broadcast-tower' },
       { to: '/cai-dat', label: 'Cài đặt', icon: 'pi-cog' },
       { to: '/nhat-ky', label: 'Nhật ký', icon: 'pi-history' },
+      { to: '/roles', label: 'Quản lý quyền', icon: 'pi-shield' },
+      { to: '/admins', label: 'Quản trị viên', icon: 'pi-user-edit' },
     ],
   },
 ];
@@ -179,6 +181,8 @@ const titles: Record<string, string> = {
   '/livestream': 'Livestream',
   '/cai-dat': 'Cài đặt hệ thống',
   '/nhat-ky': 'Nhật ký hoạt động',
+  '/roles': 'Quản lý quyền',
+  '/admins': 'Quản trị viên',
 };
 const pageTitle = computed(() => titles[route.path] || 'VTC ANY CMS');
 const displayName = computed(() => user.value?.email || user.value?.username || 'Admin');

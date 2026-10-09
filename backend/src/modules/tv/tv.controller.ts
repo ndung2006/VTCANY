@@ -2,12 +2,15 @@ import { Controller, Get, HttpException, HttpStatus, Param, Query, Req } from '@
 import { JwtService } from '@nestjs/jwt';
 import { TvService } from './tv.service';
 import { hasPermission, Role } from '../auth/users.store';
+import { hasModulePermission } from '../auth/permissions.catalog';
+import { RolesService } from '../auth/roles.service';
+import { Optional } from '@nestjs/common';
 
 // Public cho web (public_id 24hex). Slug tên kênh (CMS) vẫn yêu cầu quyền epg:read.
 // Handler duy nhất để tránh xung đột route với ContentController.
 @Controller('channels')
 export class TvController {
-  constructor(private tv: TvService, private jwt: JwtService) {}
+  constructor(private tv: TvService, private jwt: JwtService, @Optional() private roles?: RolesService) {}
 
   // GET /api/v1/channels (Mục 3C).
   @Get()
@@ -27,20 +30,34 @@ export class TvController {
         throw new HttpException({ error: { code: status === 404 ? 'not_found' : 'bad_request', message: e?.message } }, status);
       }
     }
-    const role = this.optionalRole(req);
-    if (!role) throw new HttpException('missing bearer token', HttpStatus.UNAUTHORIZED);
-    if (!hasPermission(role as Role, 'epg:read')) throw new HttpException('forbidden', HttpStatus.FORBIDDEN);
+    const auth = this.optionalAuth(req);
+    if (!auth) throw new HttpException('missing bearer token', HttpStatus.UNAUTHORIZED);
+    if (!(await this.canReadEpg(auth))) throw new HttpException('forbidden', HttpStatus.FORBIDDEN);
     return this.tv.cmsEpgBySlug(id, date);
   }
 
-  private optionalRole(req: any): string | undefined {
+  private optionalAuth(req: any): { role?: string; sub?: string } | undefined {
     const header: string = req.headers?.authorization || '';
     const [, token] = header.split(' ');
     if (!token) return undefined;
     try {
-      return this.jwt.verify(token)?.role;
+      const payload = this.jwt.verify(token) as any;
+      return { role: payload?.role, sub: payload?.sub };
     } catch {
       return undefined;
     }
+  }
+
+  // DB-first (giong PermissionsGuard), fallback role cung.
+  private async canReadEpg(auth: { role?: string; sub?: string }): Promise<boolean> {
+    if (this.roles && auth.sub) {
+      try {
+        const map = await this.roles.permissionMapForAdmin(auth.sub);
+        if (map) return hasModulePermission(map, 'epg:read');
+      } catch {
+        /* fallback */
+      }
+    }
+    return hasPermission((auth.role as Role) || 'admin', 'epg:read');
   }
 }

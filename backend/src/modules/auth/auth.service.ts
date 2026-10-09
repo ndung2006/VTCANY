@@ -3,6 +3,8 @@ import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import { randomBytes, randomUUID } from 'crypto';
 import { END_USERS, EndUser, OAuthProvider, PROFILES, SESSIONS, USERS, CmsUser, Role, isOAuthProvider, permissionsFor } from './users.store';
+import { flattenPermissions } from './permissions.catalog';
+import { RolesService } from './roles.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { UsersService } from './users.service';
 
@@ -24,6 +26,7 @@ export class AuthService implements OnModuleInit {
     private jwt: JwtService,
     @Optional() private prisma?: PrismaService,
     @Optional() private users?: UsersService,
+    @Optional() private roles?: RolesService,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -99,6 +102,19 @@ export class AuthService implements OnModuleInit {
     return mem ? { user: mem, source: 'memory' } : null;
   }
 
+  // Quyen tra ve cho CMS login: DB-first (Role.permissions), fallback role cung.
+  private async permissionsForAdmin(userId: string, source: 'db' | 'memory', legacyRole: Role): Promise<string[]> {
+    if (source === 'db' && this.roles) {
+      try {
+        const map = await this.roles.permissionMapForAdmin(userId);
+        if (map) return flattenPermissions(map);
+      } catch {
+        /* fallback */
+      }
+    }
+    return permissionsFor(legacyRole);
+  }
+
   // ---- CMS username login (giữ tương thích app/CMS hiện tại) ----
   async login(username: string, password: string) {
     const found = await this.findCmsUser({ username });
@@ -106,7 +122,7 @@ export class AuthService implements OnModuleInit {
     const ok = await bcrypt.compare(password, found.user.passwordHash);
     if (!ok) throw new Error('invalid credentials');
     await this.touchLastLogin(found);
-    return this.issueCmsPair(found.user.id, found.user.username, found.user.role);
+    return this.issueCmsPair(found.user.id, found.user.username, found.user.role, found.source);
   }
 
   // ---- Bước 2: POST /auth/admin/login {email, password} ----
@@ -116,7 +132,7 @@ export class AuthService implements OnModuleInit {
     const ok = await bcrypt.compare(password, found.user.passwordHash);
     if (!ok) throw new Error('invalid credentials');
     await this.touchLastLogin(found);
-    return this.issueCmsPair(found.user.id, found.user.username, found.user.role);
+    return this.issueCmsPair(found.user.id, found.user.username, found.user.role, found.source);
   }
 
   private async touchLastLogin(found: { user: CmsUser; source: 'db' | 'memory' }): Promise<void> {
@@ -239,7 +255,7 @@ export class AuthService implements OnModuleInit {
       return {
         kind: 'cms' as const,
         user: { id: user.id, username: user.username, email: user.email, fullName: user.fullName, role: user.role },
-        permissions: permissionsFor(user.role),
+        permissions: await this.permissionsForAdmin(user.id, found.source, user.role),
       };
     }
     const user = END_USERS.find((u) => u.id === payload.sub);
@@ -255,7 +271,7 @@ export class AuthService implements OnModuleInit {
     if (rec.kind === 'cms') {
       const found = await this.findCmsUser({ id: rec.userId });
       if (!found) throw new Error('invalid refresh token');
-      return this.issueCmsPair(found.user.id, found.user.username, found.user.role);
+      return this.issueCmsPair(found.user.id, found.user.username, found.user.role, found.source);
     }
     const user = END_USERS.find((u) => u.id === rec.userId);
     if (!user || user.status !== 'active') throw new Error('invalid refresh token');
@@ -293,8 +309,8 @@ export class AuthService implements OnModuleInit {
     });
   }
 
-  private async issueCmsPair(sub: string, username: string, role: string) {
-    const permissions = permissionsFor(role as any);
+  private async issueCmsPair(sub: string, username: string, role: string, source: 'db' | 'memory' = 'memory') {
+    const permissions = await this.permissionsForAdmin(sub, source, role as any);
     const access_token = await this.jwt.signAsync({ sub, username, role, permissions, kind: 'cms' });
     const refresh_token = randomBytes(32).toString('hex');
     this.refreshTokens.set(refresh_token, { userId: sub, kind: 'cms', exp: Date.now() + REFRESH_TTL_MS });
