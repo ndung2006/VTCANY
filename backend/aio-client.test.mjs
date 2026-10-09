@@ -116,3 +116,35 @@ test('isAudioOnly: nhan dien qua hlsTranscodeRotating (scan moi)', async () => {
   assert.equal(isAudioOnly({ name: 'LAICHAU', hlsTranscode: [{ preset: 'p720', hls: 'x' }] }), false);
   assert.equal(isAudioOnly({ name: 'X', hlsTranscodeRotating: [] }), false);
 });
+
+test('stitch timeshift: TARGETDURATION dung truoc segment, giu DISCONTINUITY, URI tuyet doi', async () => {
+  const { stitchTimeshiftPlaylists } = await import('./dist/modules/playback/aio-client.js');
+  const aio = `#EXTM3U
+#EXT-X-VERSION:3
+#EXT-X-PLAYLIST-TYPE:VOD
+#EXT-X-TARGETDURATION:11
+#EXT-X-MEDIA-SEQUENCE:100
+#EXTINF:10.0,
+/api/timeshift/chunks?ch=ANGIANG1&ts=001&token=abc&exp=999
+#EXT-X-DISCONTINUITY
+#EXTINF:9.8,
+/api/timeshift/chunks?ch=ANGIANG1&ts=002&token=abc&exp=999
+#EXT-X-ENDLIST
+`;
+  const out = stitchTimeshiftPlaylists([{ playlist: aio, baseUrl: 'https://luuchieu1.vtcplay.vn' }]);
+  const lines = out.split('\n');
+  const tdIdx = lines.findIndex((l) => l.startsWith('#EXT-X-TARGETDURATION:'));
+  const firstInf = lines.findIndex((l) => l.startsWith('#EXTINF:'));
+  assert.ok(tdIdx !== -1 && tdIdx < firstInf, 'TARGETDURATION phai dung truoc segment');
+  assert.ok(lines.includes('#EXT-X-DISCONTINUITY'), 'giu DISCONTINUITY trong chunk');
+  assert.ok(lines.includes('https://luuchieu1.vtcplay.vn/api/timeshift/chunks?ch=ANGIANG1&ts=001&token=abc&exp=999'));
+  assert.ok(out.endsWith('#EXT-X-ENDLIST\n'));
+});
+
+test('stitch timeshift: playlist rong -> throw 404', async () => {
+  const { stitchTimeshiftPlaylists } = await import('./dist/modules/playback/aio-client.js');
+  assert.throws(
+    () => stitchTimeshiftPlaylists([{ playlist: '#EXTM3U\n#EXT-X-ENDLIST\n', baseUrl: 'https://x' }]),
+    (e) => e.status === 404,
+  );
+});

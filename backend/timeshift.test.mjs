@@ -81,8 +81,9 @@ seg2.m4s
   assert.ok(out.includes('https://a.io/seg1.m4s'));
 });
 
-test('stitchTimeshiftPlaylists: chunk rong -> chi header + ENDLIST', () => {
-  const out = stitchTimeshiftPlaylists([{ playlist: '#EXTM3U\n#EXT-X-ENDLIST\n', baseUrl: 'https://a.io' }]);
-  assert.ok(out.includes('#EXT-X-ENDLIST'));
-  assert.equal(out.match(/#EXTINF/g), null);
+test('stitchTimeshiftPlaylists: chunk rong -> throw 404', () => {
+  assert.throws(
+    () => stitchTimeshiftPlaylists([{ playlist: '#EXTM3U\n#EXT-X-ENDLIST\n', baseUrl: 'https://a.io' }]),
+    (e) => e.status === 404,
+  );
 });

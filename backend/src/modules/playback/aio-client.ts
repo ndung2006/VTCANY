@@ -229,15 +229,16 @@ function absolutizeTagUris(tagLine: string, baseUrl: string): string {
 }
 
 // Noi nhieu playlist VOD (moi chunk <= 6h) thanh 1 playlist duy nhat.
-// - Bo header/footer rieng cua tung chunk, giu 1 header chung + 1 ENDLIST.
-// - DISCONTINUITY giua cac chunk (phong timestamp/codec lech).
+// - 1 header chung (TARGETDURATION dung truoc segment theo chuan HLS) + 1 ENDLIST.
+// - DISCONTINUITY giua cac chunk (phong timestamp/codec lech); giu DISCONTINUITY trong chunk.
 // - KEY/MAP duoc mang theo va ap dung dung segment.
+// - Khong co segment nao -> throw 404 (de FE hien loi ro rang thay vi player quay mai).
 export function stitchTimeshiftPlaylists(chunks: Array<{ playlist: string; baseUrl: string }>): string {
-  const out: string[] = ['#EXTM3U', '#EXT-X-VERSION:3', '#EXT-X-PLAYLIST-TYPE:VOD'];
+  const segs: string[] = [];
   let maxTarget = 10;
   let firstChunk = true;
   for (const { playlist, baseUrl } of chunks) {
-    const segs: string[] = [];
+    const chunkSegs: string[] = [];
     let pendingKey: string | null = null;
     let pendingMap: string | null = null;
     let pendingInf: string | null = null;
@@ -252,21 +253,30 @@ export function stitchTimeshiftPlaylists(chunks: Array<{ playlist: string; baseU
       if (line.startsWith('#EXT-X-KEY:')) { pendingKey = absolutizeTagUris(line, baseUrl); continue; }
       if (line.startsWith('#EXT-X-MAP:')) { pendingMap = absolutizeTagUris(line, baseUrl); continue; }
       if (line.startsWith('#EXTINF:')) { pendingInf = line; continue; }
-      if (line.startsWith('#')) continue; // header/footer chunk: VERSION, SEQUENCE, DISCONTINUITY-SEQUENCE, START, PROGRAM-DATE-TIME, ENDLIST...
+      if (line === '#EXT-X-DISCONTINUITY') { chunkSegs.push(line); continue; }
+      if (line.startsWith('#')) continue; // header/footer chunk: VERSION, SEQUENCE, START, PROGRAM-DATE-TIME, ENDLIST...
       if (pendingInf) {
-        if (pendingKey) { segs.push(pendingKey); pendingKey = null; }
-        if (pendingMap) { segs.push(pendingMap); pendingMap = null; }
-        segs.push(pendingInf, absolutizeUri(line, baseUrl));
+        if (pendingKey) { chunkSegs.push(pendingKey); pendingKey = null; }
+        if (pendingMap) { chunkSegs.push(pendingMap); pendingMap = null; }
+        chunkSegs.push(pendingInf, absolutizeUri(line, baseUrl));
         pendingInf = null;
       }
     }
-    if (segs.length) {
-      if (!firstChunk) out.push('#EXT-X-DISCONTINUITY');
-      out.push(...segs);
+    if (chunkSegs.length) {
+      if (!firstChunk) segs.push('#EXT-X-DISCONTINUITY');
+      segs.push(...chunkSegs);
       firstChunk = false;
     }
   }
-  out.push(`#EXT-X-TARGETDURATION:${Math.ceil(maxTarget)}`);
-  out.push('#EXT-X-ENDLIST');
-  return out.join('\n') + '\n';
+  if (!segs.length) {
+    throw Object.assign(new Error('aio: khong co ban ghi cho khung gio nay'), { status: 404 });
+  }
+  return [
+    '#EXTM3U',
+    '#EXT-X-VERSION:3',
+    '#EXT-X-PLAYLIST-TYPE:VOD',
+    `#EXT-X-TARGETDURATION:${Math.ceil(maxTarget)}`,
+    ...segs,
+    '#EXT-X-ENDLIST',
+  ].join('\n') + '\n';
 }
