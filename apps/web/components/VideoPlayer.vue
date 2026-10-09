@@ -38,6 +38,11 @@
       <i class="pi pi-spin pi-spinner !text-4xl text-white" />
     </div>
 
+    <!-- Bao loi phat (tam hien de chan doan su co timeshift/hls) -->
+    <div v-if="playError && !loading" class="absolute inset-x-0 top-0 flex justify-center p-2">
+      <div class="rounded bg-red-900/90 px-3 py-1.5 text-xs text-red-100">Lỗi phát: {{ playError }}</div>
+    </div>
+
     <!-- Nut play lon giua man hinh khi pause -->
     <button
       v-if="!playing && !loading"
@@ -152,6 +157,8 @@ const progressEl = ref<HTMLElement | null>(null);
 
 const loading = ref(true);
 const playing = ref(false);
+// Loi phat (hls.js): hien len UI de chan doan (VD CORS segment, playlist loi).
+const playError = ref<string | null>(null);
 const current = ref(0);
 const duration = ref(0);
 const volume = ref(1);
@@ -336,6 +343,11 @@ onMounted(() => {
         .filter((l) => l.height > 0)
         .sort((a, b) => b.height - a.height);
       tryAutoplay();
+    });
+    hls.on(Hls.Events.ERROR, (_ev, data) => {
+      if (!data?.fatal) return;
+      playError.value = `${data.type}/${data.details}`;
+      loading.value = false;
     });
     hls.loadSource(props.src);
     hls.attachMedia(video);
