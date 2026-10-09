@@ -158,6 +158,8 @@ model ChannelOverride {
   hlsUrl        String?  @map("hls_url")
   dashUrl       String?  @map("dash_url")
   catchupHlsUrl String?  @map("catchup_hls_url")
+  timeshiftEnabled Boolean @default(false) @map("timeshift_enabled") // kenh co bat ghi de xem lai
+  timeshiftSrc  String?  @map("timeshift_src") // VD 'after' cho kenh ghi sau-encode (VOV1)
   useAioEpg     Boolean  @default(true) @map("use_aio_epg") // false: chi dung lich EPG CMS nhap tay, khong lay tu AIO
   isCustom      Boolean  @default(false) @map("is_custom")
   createdAt     DateTime @default(now()) @map("created_at")

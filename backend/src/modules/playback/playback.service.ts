@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { clampTtlMinutes, getChannels, getEpgSchedule, isAudioOnly, urlExpMs } from './aio-client';
+import { clampTtlMinutes, getChannels, getEpgSchedule, getTimeshiftPlaylist, isAudioOnly, stitchTimeshiftPlaylists, TIMESHIFT_MAX_MS, TIMESHIFT_RETENTION_MS, urlExpMs } from './aio-client';
 import type { AioConfig } from './aio-client';
 import { AioSourceService } from './aio-source.service';
 
@@ -96,5 +96,32 @@ export class PlaybackService {
     } catch {
       return false;
     }
+  }
+
+  // Timeshift / xem lai: tra ve playlist m3u8 VOD cho khoang [startIso, endIso].
+  // - Chia chunk <= 6h theo gioi han AIO, noi lai thanh 1 playlist.
+  // - Gioi han retention 30 ngay; end vuot hien tai thi cat ve hien tai.
+  // - src: 'after' cho kenh ghi sau-encode (VD VOV1).
+  async timeshift(channel: string, startIso: string, endIso: string, src?: string | null): Promise<string> {
+    const cfg = await this.cfg();
+    const start = new Date(startIso).getTime();
+    const end = new Date(endIso).getTime();
+    if (!Number.isFinite(start) || !Number.isFinite(end) || start >= end) {
+      throw new Error('khoang thoi gian khong hop le');
+    }
+    if (end - start > TIMESHIFT_RETENTION_MS) throw new Error('vuot qua thoi gian luu tru 30 ngay');
+    const now = Date.now();
+    const endClamped = Math.min(end, now);
+    if (start >= endClamped) throw new Error('khong the xem lai thoi diem trong tuong lai');
+    const chunks: Array<{ playlist: string; baseUrl: string }> = [];
+    for (let s = start; s < endClamped; s += TIMESHIFT_MAX_MS) {
+      const e = Math.min(s + TIMESHIFT_MAX_MS, endClamped);
+      const pl = await getTimeshiftPlaylist(
+        cfg, channel, new Date(s).toISOString(), new Date(e).toISOString(), src || undefined,
+      );
+      chunks.push({ playlist: pl, baseUrl: cfg.baseUrl });
+    }
+    if (!chunks.length) throw new Error('aio: empty timeshift response');
+    return stitchTimeshiftPlaylists(chunks);
   }
 }

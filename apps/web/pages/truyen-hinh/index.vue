@@ -3,8 +3,8 @@
     <!-- Cột chính: player + tab nhóm kênh + lưới kênh -->
     <div class="min-w-0 flex-1">
       <div class="overflow-hidden rounded-xl bg-black">
-        <div v-if="current && epg?.channel.hls_url" class="aspect-video">
-          <VideoPlayer :key="current.public_id + '-' + playerKey" :src="epg.channel.hls_url" autoplay :background="radioBg" />
+        <div v-if="current && (replaySrc || epg?.channel.hls_url)" class="aspect-video">
+          <VideoPlayer :key="current.public_id + '-' + playerKey + (replaySrc ? '-replay' : '')" :src="replaySrc || epg?.channel.hls_url" autoplay :background="radioBg" />
         </div>
         <div v-else class="flex aspect-video flex-col items-center justify-center gap-3 bg-black">
           <span class="flex h-16 w-16 items-center justify-center rounded-full bg-neutral-800">
@@ -16,7 +16,16 @@
           <p v-else class="text-sm text-neutral-500">Chọn một kênh bên dưới để xem</p>
         </div>
       </div>
-      <h2 v-if="current" class="mt-3 text-lg font-bold">{{ current.name }}</h2>
+      <h2 v-if="current" class="mt-3 flex items-center gap-2 text-lg font-bold">
+        {{ current.name }}
+        <span v-if="replaySrc" class="flex items-center gap-2 rounded bg-neutral-800 px-2 py-0.5 text-xs font-medium text-neutral-300">
+          Đang xem lại: {{ replayTitle }}
+          <button class="text-neutral-400 hover:text-white" title="Về trực tiếp"
+            @click="replaySrc = null; replayTitle = null; playerKey++; pick(current)">
+            <i class="pi pi-times" />
+          </button>
+        </span>
+      </h2>
 
       <!-- Tab nhóm kênh -->
       <div class="mt-4 flex gap-1 overflow-x-auto">
@@ -84,6 +93,13 @@
           >
             <span class="h-1.5 w-1.5 rounded-full bg-white" /> LIVE
           </span>
+          <button
+            v-if="it.replay_url"
+            class="shrink-0 rounded bg-neutral-700 px-2 py-0.5 text-xs font-medium text-neutral-200 hover:bg-neutral-600"
+            @click="playReplay(it)"
+          >
+            Xem lại
+          </button>
         </li>
       </ul>
       <p v-else class="py-8 text-center text-sm text-neutral-500">
@@ -163,8 +179,11 @@ const radioBg = computed(() =>
 );
 const epg = ref<{
   channel: { hls_url: string | null; hls_exp?: number | null };
-  timeline: Array<{ time: string; title: string; status: string }>;
+  timeline: Array<{ time: string; title: string; status: string; replay_url?: string | null }>;
 } | null>(null);
+// Khi xem lai (VOD timeshift), player phat URL nay thay vi live.
+const replaySrc = ref<string | null>(null);
+const replayTitle = ref<string | null>(null);
 const showLogin = ref(false);
 // true trong luc cho API epg tra ve — de khong hien nham "Kenh chua co luong phat".
 const epgLoading = ref(false);
@@ -234,6 +253,8 @@ async function pick(c: Channel) {
   }
   clearRefresh();
   current.value = c;
+  replaySrc.value = null;
+  replayTitle.value = null;
   // Dong bo URL de share/reload giu dung kenh dang xem.
   router.replace({ query: { kenh: c.public_id } });
   epg.value = null;
@@ -246,6 +267,15 @@ async function pick(c: Channel) {
   scheduleRefresh();
   await nextTick();
   scrollEpgToLive();
+}
+
+// Xem lai chuong trinh da phat (VOD timeshift): dung refresh live, phat playlist replay.
+function playReplay(it: { title: string; replay_url?: string | null }) {
+  if (!it.replay_url || !current.value) return;
+  clearRefresh();
+  replayTitle.value = it.title;
+  replaySrc.value = `${config.public.apiBase as string}${it.replay_url}`;
+  playerKey.value++;
 }
 
 watch(activeDate, () => {

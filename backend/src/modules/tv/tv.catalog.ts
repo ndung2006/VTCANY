@@ -68,6 +68,8 @@ export interface ChannelOverrideLite {
   hlsUrl?: string | null;
   dashUrl?: string | null;
   catchupHlsUrl?: string | null;
+  timeshiftEnabled?: boolean;
+  timeshiftSrc?: string | null;
   useAioEpg?: boolean;
   isCustom?: boolean;
 }

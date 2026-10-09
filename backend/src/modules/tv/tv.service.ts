@@ -21,7 +21,8 @@ export interface TvChannelItem {
 
 const OVERRIDE_FIELDS = [
   'isVisible', 'sortOrder', 'groupName', 'displayName', 'description',
-  'logoUrl', 'bannerUrl', 'planId', 'hlsUrl', 'dashUrl', 'catchupHlsUrl', 'useAioEpg', 'isCustom',
+  'logoUrl', 'bannerUrl', 'planId', 'hlsUrl', 'dashUrl', 'catchupHlsUrl',
+  'timeshiftEnabled', 'timeshiftSrc', 'useAioEpg', 'isCustom',
 ] as const;
 
 // Nguồn: kênh live AIO + lịch AIO, fallback lịch local CMS nhập tay.
@@ -108,7 +109,7 @@ export class TvService {
       }
     }
 
-    let timeline: Array<{ time: string; title: string; status: string }> = [];
+    let timeline: Array<{ time: string; title: string; status: string; startIso?: string; endIso?: string; replay_url?: string | null }> = [];
     let fromAio = false;
     if (aioEpgAllowed(override)) {
       try {
@@ -121,6 +122,16 @@ export class TvService {
     }
     if (timeline.length === 0) {
       timeline = this.epgLocal.get(name, day).map((it) => ({ time: it.time, title: it.title, status: it.status }));
+    }
+    // Gan replay_url cho chuong trinh da phat (REPLAY) tren kenh bat timeshift.
+    if (override?.timeshiftEnabled) {
+      for (const it of timeline) {
+        if (it.status === 'REPLAY' && it.startIso && it.endIso) {
+          it.replay_url = `/channels/${publicId}/timeshift.m3u8?start=${encodeURIComponent(it.startIso)}&end=${encodeURIComponent(it.endIso)}`;
+        } else {
+          it.replay_url = null;
+        }
+      }
     }
 
     return {
@@ -138,6 +149,16 @@ export class TvService {
       epg_source: fromAio ? 'aio' : 'local',
       timeline,
     };
+  }
+
+  // Proxy playlist timeshift (xem lai) cho 1 kenh. Chi kenh bat timeshiftEnabled.
+  // Tra ve text m3u8 VOD (segment URL da tuyet doi hoa ve AIO).
+  async timeshiftM3u8(publicId: string, startIso: string, endIso: string): Promise<string> {
+    const name = await this.resolveName(publicId);
+    const overrides = await this.loadOverrides();
+    const override = overrides.find((o) => channelKeyOf(o.channelKey) === channelKeyOf(name));
+    if (!override?.timeshiftEnabled) throw Object.assign(new Error('kenh chua bat xem lai (timeshift)'), { status: 404 });
+    return this.playback.timeshift(name, startIso, endIso, override.timeshiftSrc || undefined);
   }
 
   // Luồng CMS (slug tên kênh, yêu cầu quyền epg:read ở controller).
@@ -197,6 +218,8 @@ export class TvService {
         hlsUrl: o?.hlsUrl ?? null,
         dashUrl: o?.dashUrl ?? null,
         catchupHlsUrl: o?.catchupHlsUrl ?? null,
+        timeshiftEnabled: o?.timeshiftEnabled === true,
+        timeshiftSrc: o?.timeshiftSrc ?? null,
         useAioEpg: o?.useAioEpg !== false,
       });
     }
@@ -220,6 +243,8 @@ export class TvService {
         hlsUrl: o.hlsUrl ?? null,
         dashUrl: o.dashUrl ?? null,
         catchupHlsUrl: o.catchupHlsUrl ?? null,
+        timeshiftEnabled: o.timeshiftEnabled === true,
+        timeshiftSrc: o.timeshiftSrc ?? null,
         useAioEpg: o.useAioEpg !== false,
       });
     }

@@ -32,6 +32,8 @@ export interface EpgTimelineItem {
   time: string;
   title: string;
   status: 'LIVE' | 'UPCOMING' | 'REPLAY';
+  startIso?: string;
+  endIso?: string;
 }
 
 // Map lich AIO (nhieu dang payload) ve timeline chuan. Khong map duoc -> [] (fallback local).
@@ -51,7 +53,13 @@ export function mapEpgSchedule(data: any, now = Date.now()): EpgTimelineItem[] {
     const status = Number.isFinite(s) && s > now ? 'UPCOMING' : Number.isFinite(e) && e < now ? 'REPLAY' : 'LIVE';
     const d = new Date(Number.isFinite(s) ? s : now);
     const time = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-    out.push({ time, title: String(title), status });
+    out.push({
+      time,
+      title: String(title),
+      status,
+      startIso: Number.isFinite(s) ? new Date(s).toISOString() : undefined,
+      endIso: Number.isFinite(e) ? new Date(e).toISOString() : undefined,
+    });
   }
   return out;
 }
@@ -146,4 +154,112 @@ export async function mintToken(cfg: AioConfig, channel: string, ttlMinutes: num
   });
   if (!data?.token || !data?.exp || !data?.url) throw new Error('aio: bad token response');
   return { token: data.token, exp: data.exp, url: data.url };
+}
+
+// ---------------------------------------------------------------------------
+// Timeshift / xem lai (catch-up): GET /api/timeshift/{tenkenh}?in=ISO&out=ISO
+// Tra ve playlist m3u8 VOD dung khoang thoi gian. Toi da 6h/call; xac thuc
+// bang partner key + IP allowlist hien tai (server-side).
+// ---------------------------------------------------------------------------
+export const TIMESHIFT_MAX_MS = 6 * 3600 * 1000;
+export const TIMESHIFT_RETENTION_MS = 30 * 24 * 3600 * 1000;
+
+// Bien the aioFetch tra ve text (cho m3u8), khong parse JSON.
+async function aioFetchText(cfg: AioConfig, path: string): Promise<string> {
+  if (!cfg.partnerKey) throw new Error('VTC_PARTNER_KEY is not configured (server-only)');
+  let lastErr: unknown = null;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 30_000);
+    try {
+      const res = await fetch(fullUrl(cfg.baseUrl, path), {
+        headers: { Authorization: `Bearer ${cfg.partnerKey}` },
+        signal: ctrl.signal,
+      });
+      const text = await res.text();
+      if (res.status === 401) throw new Error('aio: invalid partner key (401)');
+      if (res.status === 403) throw new Error('aio: channel not opted-in or stopped (403)');
+      if (res.status === 404) throw new Error('aio: timeshift not available (404)');
+      if (res.status >= 500) throw new Error(`aio: http ${res.status} (retryable)`);
+      if (!res.ok) throw new Error(`aio: http ${res.status}`);
+      if (!text.includes('#EXTM3U')) throw new Error('aio: timeshift tra ve khong phai playlist m3u8');
+      return text;
+    } catch (e: any) {
+      lastErr = e;
+      const retryable = /retryable|abort|fetch failed|network|ECONN/i.test(e?.message || e?.cause?.message || '');
+      if (!retryable || attempt === 1) throw e;
+      await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  throw lastErr;
+}
+
+// 1 call timeshift (<= 6h). src: 'after' cho kenh ghi sau-encode (VD VOV1).
+export async function getTimeshiftPlaylist(
+  cfg: AioConfig,
+  channel: string,
+  startIso: string,
+  endIso: string,
+  src?: string | null,
+): Promise<string> {
+  const q = `in=${encodeURIComponent(startIso)}&out=${encodeURIComponent(endIso)}${src ? `&src=${encodeURIComponent(src)}` : ''}`;
+  return aioFetchText(cfg, `/api/timeshift/${encodeURIComponent(channel)}?${q}`);
+}
+
+// Dua URI tuong doi ve tuyet doi theo baseUrl cua AIO.
+export function absolutizeUri(uri: string, baseUrl: string): string {
+  const u = (uri || '').trim();
+  if (!u || /^(https?:)?\/\//i.test(u) || u.startsWith('data:')) return u;
+  const base = baseUrl.replace(/\/$/, '');
+  return u.startsWith('/') ? `${new URL(base).origin}${u}` : `${base}/${u}`;
+}
+
+// Thay URI="..." tuong doi trong tag (EXT-X-KEY / EXT-X-MAP) thanh tuyet doi.
+function absolutizeTagUris(tagLine: string, baseUrl: string): string {
+  return tagLine.replace(/URI="([^"]+)"/g, (_m, u) => `URI="${absolutizeUri(u, baseUrl)}"`);
+}
+
+// Noi nhieu playlist VOD (moi chunk <= 6h) thanh 1 playlist duy nhat.
+// - Bo header/footer rieng cua tung chunk, giu 1 header chung + 1 ENDLIST.
+// - DISCONTINUITY giua cac chunk (phong timestamp/codec lech).
+// - KEY/MAP duoc mang theo va ap dung dung segment.
+export function stitchTimeshiftPlaylists(chunks: Array<{ playlist: string; baseUrl: string }>): string {
+  const out: string[] = ['#EXTM3U', '#EXT-X-VERSION:3', '#EXT-X-PLAYLIST-TYPE:VOD'];
+  let maxTarget = 10;
+  let firstChunk = true;
+  for (const { playlist, baseUrl } of chunks) {
+    const segs: string[] = [];
+    let pendingKey: string | null = null;
+    let pendingMap: string | null = null;
+    let pendingInf: string | null = null;
+    for (const raw of playlist.split('\n')) {
+      const line = raw.trim();
+      if (!line) continue;
+      if (line.startsWith('#EXT-X-TARGETDURATION:')) {
+        const n = Number(line.split(':')[1]);
+        if (Number.isFinite(n) && n > maxTarget) maxTarget = n;
+        continue;
+      }
+      if (line.startsWith('#EXT-X-KEY:')) { pendingKey = absolutizeTagUris(line, baseUrl); continue; }
+      if (line.startsWith('#EXT-X-MAP:')) { pendingMap = absolutizeTagUris(line, baseUrl); continue; }
+      if (line.startsWith('#EXTINF:')) { pendingInf = line; continue; }
+      if (line.startsWith('#')) continue; // header/footer chunk: VERSION, SEQUENCE, DISCONTINUITY-SEQUENCE, START, PROGRAM-DATE-TIME, ENDLIST...
+      if (pendingInf) {
+        if (pendingKey) { segs.push(pendingKey); pendingKey = null; }
+        if (pendingMap) { segs.push(pendingMap); pendingMap = null; }
+        segs.push(pendingInf, absolutizeUri(line, baseUrl));
+        pendingInf = null;
+      }
+    }
+    if (segs.length) {
+      if (!firstChunk) out.push('#EXT-X-DISCONTINUITY');
+      out.push(...segs);
+      firstChunk = false;
+    }
+  }
+  out.push(`#EXT-X-TARGETDURATION:${Math.ceil(maxTarget)}`);
+  out.push('#EXT-X-ENDLIST');
+  return out.join('\n') + '\n';
 }

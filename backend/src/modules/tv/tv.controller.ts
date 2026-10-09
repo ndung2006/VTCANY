@@ -1,4 +1,4 @@
-import { Controller, Get, HttpException, HttpStatus, Param, Query, Req } from '@nestjs/common';
+import { Controller, Get, Header, HttpException, HttpStatus, Param, Query, Req } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { TvService } from './tv.service';
 import { hasPermission, Role } from '../auth/users.store';
@@ -34,6 +34,22 @@ export class TvController {
     if (!auth) throw new HttpException('missing bearer token', HttpStatus.UNAUTHORIZED);
     if (!(await this.canReadEpg(auth))) throw new HttpException('forbidden', HttpStatus.FORBIDDEN);
     return this.tv.cmsEpgBySlug(id, date);
+  }
+
+  // GET /api/v1/channels/{publicId}/timeshift.m3u8?start=ISO&end=ISO (public).
+  // Proxy playlist xem lai (VOD) tu AIO: segment URL da tuyet doi hoa.
+  @Get(':id/timeshift.m3u8')
+  @Header('Content-Type', 'application/vnd.apple.mpegurl')
+  @Header('Cache-Control', 'no-store')
+  async timeshift(@Param('id') id: string, @Query('start') start: string, @Query('end') end: string) {
+    if (!/^[0-9a-f]{24}$/.test(id)) throw new HttpException('invalid public_id', HttpStatus.BAD_REQUEST);
+    if (!start || !end) throw new HttpException('thieu start/end (ISO 8601)', HttpStatus.BAD_REQUEST);
+    try {
+      return await this.tv.timeshiftM3u8(id, start, end);
+    } catch (e: any) {
+      const status = e?.status === 404 ? HttpStatus.NOT_FOUND : HttpStatus.BAD_REQUEST;
+      throw new HttpException({ error: { code: status === 404 ? 'not_found' : 'bad_request', message: e?.message } }, status);
+    }
   }
 
   private optionalAuth(req: any): { role?: string; sub?: string } | undefined {
