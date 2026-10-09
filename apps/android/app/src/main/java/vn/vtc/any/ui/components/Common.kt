@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
@@ -134,7 +135,24 @@ fun RailSection(
             }
         }
         Spacer(Modifier.height(8.dp))
+        // Tự cuộn qua lại (ping-pong) cho sinh động; dừng khi người dùng đang vuốt.
+        val listState = rememberLazyListState()
+        LaunchedEffect(items.size) {
+            var index = 0
+            var dir = 1
+            while (true) {
+                delay(3000)
+                if (listState.isScrollInProgress) continue
+                val total = listState.layoutInfo.totalItemsCount
+                if (total <= 1) continue
+                index += dir
+                if (index >= total - 1) { index = total - 1; dir = -1 }
+                if (index <= 0) { index = 0; dir = 1 }
+                runCatching { listState.animateScrollToItem(index) }
+            }
+        }
         LazyRow(
+            state = listState,
             contentPadding = PaddingValues(horizontal = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
@@ -155,10 +173,18 @@ fun BannerCarousel(
 ) {
     if (banners.isEmpty()) return
     val pagerState = rememberPagerState(pageCount = { banners.size })
+    // Tự xoay luân phiên: tới cuối thì quay ngược lại (ping-pong).
+    var bannerDir by remember { mutableStateOf(1) }
     LaunchedEffect(pagerState.currentPage, banners.size) {
         if (banners.size > 1) {
             delay(autoRotateMs)
-            pagerState.animateScrollToPage((pagerState.currentPage + 1) % banners.size)
+            val cur = pagerState.currentPage
+            var next = cur + bannerDir
+            if (next >= banners.size) { next = banners.size - 2; bannerDir = -1 }
+            if (next < 0) { next = 1; bannerDir = 1 }
+            if (next in 0 until banners.size) {
+                runCatching { pagerState.animateScrollToPage(next) }
+            }
         }
     }
     Box(modifier.fillMaxWidth()) {
