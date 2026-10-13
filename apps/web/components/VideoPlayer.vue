@@ -21,6 +21,7 @@
       @timeupdate="onTimeUpdate"
       @loadedmetadata="onLoadedMeta"
       @volumechange="onVolumeChange"
+      @error="onVideoError"
       @click.stop
     />
 
@@ -317,6 +318,13 @@ function onVolumeChange() {
   volume.value = v.volume;
   muted.value = v.muted;
 }
+// Loi native (Safari): khong co handler nay thi hong la spinner quay mai
+// khong bao gi. Ma MediaError: 1=aborted, 2=network, 3=decode, 4=src.
+function onVideoError() {
+  const code = (videoEl.value?.error as { code?: number } | null)?.code ?? 0;
+  playError.value = `native/${code}`;
+  loading.value = false;
+}
 function onDocClick() {
   qOpen.value = false;
 }
@@ -331,10 +339,12 @@ onMounted(() => {
     return;
   }
   canPip.value = typeof (video as any).requestPictureInPicture === 'function';
-  if (video.canPlayType('application/vnd.apple.mpegurl')) {
-    video.src = props.src; // Safari: HLS native (khong co chon muc)
-    if (props.autoplay) video.addEventListener('canplay', tryAutoplay, { once: true });
-  } else if (Hls.isSupported()) {
+  // Playlist timeshift VOD co EXT-X-DISCONTINUITY ma trinh phat HLS native
+  // (Safari) hay ket im lang -> uu tien hls.js khi browser ho tro MSE.
+  // iOS (khong MSE) van dung native nhu cu.
+  const isTimeshift = props.src.includes('timeshift.m3u8');
+  const canNative = !!video.canPlayType('application/vnd.apple.mpegurl');
+  if (Hls.isSupported() && (!canNative || isTimeshift)) {
     const hls = new Hls();
     hlsRef.value = hls;
     hls.on(Hls.Events.MANIFEST_PARSED, () => {
@@ -351,6 +361,9 @@ onMounted(() => {
     });
     hls.loadSource(props.src);
     hls.attachMedia(video);
+  } else if (canNative) {
+    video.src = props.src; // Safari: HLS native (khong co chon muc)
+    if (props.autoplay) video.addEventListener('canplay', tryAutoplay, { once: true });
   } else {
     loading.value = false;
   }
