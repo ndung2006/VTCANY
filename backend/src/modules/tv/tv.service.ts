@@ -1,7 +1,7 @@
 import { Injectable, Optional } from '@nestjs/common';
 import { PlaybackService } from '../playback/playback.service';
 import { EpgService } from '../content/epg.service';
-import { mapEpgSchedule } from '../playback/aio-client';
+import { findCoverageEntry, mapEpgSchedule } from '../playback/aio-client';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
   aioEpgAllowed,
@@ -125,8 +125,15 @@ export class TvService {
     if (timeline.length === 0) {
       timeline = this.epgLocal.get(name, day).map((it) => ({ time: it.time, title: it.title, status: it.status }));
     }
-    // Gan replay_url cho chuong trinh da phat (REPLAY) tren kenh bat timeshift.
-    if (override?.timeshiftEnabled) {
+    // Gan replay_url cho chuong trinh da phat (REPLAY) tren kenh co du lieu xem lai.
+    // - DB override.timeshiftEnabled = cong tac chinh cua admin (uu tien).
+    // - Chua cau hinh DB -> tu nhan tu /api/timeshift/coverage cua AIO.
+    let replayOn = !!override?.timeshiftEnabled;
+    if (!override) {
+      const covEntry = findCoverageEntry(await this.playback.timeshiftCoverage(), name);
+      replayOn = !!covEntry;
+    }
+    if (replayOn) {
       for (const it of timeline) {
         if (it.status === 'REPLAY' && it.startIso && it.endIso) {
           it.replay_url = `/channels/${publicId}/timeshift.m3u8?start=${encodeURIComponent(it.startIso)}&end=${encodeURIComponent(it.endIso)}`;
@@ -159,8 +166,14 @@ export class TvService {
     const name = await this.resolveName(publicId);
     const overrides = await this.loadOverrides();
     const override = overrides.find((o) => channelKeyOf(o.channelKey) === channelKeyOf(name));
-    if (!override?.timeshiftEnabled) throw Object.assign(new Error('kenh chua bat xem lai (timeshift)'), { status: 404 });
-    return this.playback.timeshift(name, startIso, endIso, override.timeshiftSrc || undefined);
+    if (override) {
+      if (!override.timeshiftEnabled) throw Object.assign(new Error('kenh chua bat xem lai (timeshift)'), { status: 404 });
+    } else {
+      // Chua cau hinh DB -> chi cho phep khi /api/timeshift/coverage co du lieu that.
+      const covEntry = findCoverageEntry(await this.playback.timeshiftCoverage(), name);
+      if (!covEntry) throw Object.assign(new Error('kenh chua co du lieu xem lai (timeshift)'), { status: 404 });
+    }
+    return this.playback.timeshift(name, startIso, endIso, override?.timeshiftSrc || undefined);
   }
 
   // Luồng CMS (slug tên kênh, yêu cầu quyền epg:read ở controller).

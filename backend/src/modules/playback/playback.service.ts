@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { clampTtlMinutes, getChannels, getEpgSchedule, getTimeshiftPlaylist, isAudioOnly, stitchTimeshiftPlaylists, TIMESHIFT_MAX_MS, TIMESHIFT_RETENTION_MS, urlExpMs } from './aio-client';
+import { clampTtlMinutes, findCoverageEntry, getChannels, getEpgSchedule, getTimeshiftCoverage, getTimeshiftPlaylist, isAudioOnly, stitchTimeshiftPlaylists, TIMESHIFT_MAX_MS, TIMESHIFT_RETENTION_MS, urlExpMs } from './aio-client';
 import type { AioConfig } from './aio-client';
 import { AioSourceService } from './aio-source.service';
 
@@ -101,7 +101,9 @@ export class PlaybackService {
   // Timeshift / xem lai: tra ve playlist m3u8 VOD cho khoang [startIso, endIso].
   // - Chia chunk <= 6h theo gioi han AIO, noi lai thanh 1 playlist.
   // - Gioi han retention 30 ngay; end vuot hien tai thi cat ve hien tai.
-  // - src: 'after' cho kenh ghi sau-encode (VD VOV1).
+  // - src: 'after' cho kenh ghi sau-encode. Neu khong truyen src, tu nhan tu
+  //   /api/timeshift/coverage (kinds co 'after' -> src='after'); DB override van uu tien.
+  // - Kep khung gio theo oldestAvailable tu coverage de bao loi ro rang thay vi 404 oan.
   async timeshift(channel: string, startIso: string, endIso: string, src?: string | null): Promise<string> {
     const cfg = await this.cfg();
     const start = new Date(startIso).getTime();
@@ -113,15 +115,33 @@ export class PlaybackService {
     const now = Date.now();
     const endClamped = Math.min(end, now);
     if (start >= endClamped) throw new Error('khong the xem lai thoi diem trong tuong lai');
+    // Coverage: vung du lieu that tu AIO (cache 1h; loi -> null -> fallback logic cu).
+    let effectiveSrc = src || undefined;
+    const covEntry = findCoverageEntry(await getTimeshiftCoverage(cfg), channel);
+    if (covEntry) {
+      if (!effectiveSrc && covEntry.kinds.includes('after')) effectiveSrc = 'after';
+      const oldest = new Date(covEntry.oldestAvailable).getTime();
+      if (Number.isFinite(oldest) && start < oldest) {
+        throw Object.assign(
+          new Error(`khung gio nam ngoai vung du lieu xem lai (kenh ${channel} hien chi co du lieu tu ${covEntry.oldestAvailable})`),
+          { status: 400 },
+        );
+      }
+    }
     const chunks: Array<{ playlist: string; baseUrl: string }> = [];
     for (let s = start; s < endClamped; s += TIMESHIFT_MAX_MS) {
       const e = Math.min(s + TIMESHIFT_MAX_MS, endClamped);
       const pl = await getTimeshiftPlaylist(
-        cfg, channel, new Date(s).toISOString(), new Date(e).toISOString(), src || undefined,
+        cfg, channel, new Date(s).toISOString(), new Date(e).toISOString(), effectiveSrc,
       );
       chunks.push({ playlist: pl, baseUrl: cfg.baseUrl });
     }
     if (!chunks.length) throw new Error('aio: empty timeshift response');
     return stitchTimeshiftPlaylists(chunks);
+  }
+
+  // Coverage timeshift (phuc vu EPG/quyet dinh hien nut Xem lai). Null khi AIO loi.
+  async timeshiftCoverage() {
+    return getTimeshiftCoverage(await this.cfg());
   }
 }

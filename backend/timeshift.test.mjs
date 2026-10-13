@@ -87,3 +87,25 @@ test('stitchTimeshiftPlaylists: chunk rong -> throw 404', () => {
     (e) => e.status === 404,
   );
 });
+
+test('findCoverageEntry: khop khong phan biet hoa/thuong, tra null khi thieu', async () => {
+  const { findCoverageEntry } = await import('./dist/modules/playback/aio-client.js');
+  const cov = { now: '2026-10-13T00:00:00Z', coverage: [
+    { channel: 'ANGIANG1', oldestAvailable: '2026-10-11T00:00:00Z', retentionDays: 30, kinds: ['after'] },
+    { channel: 'LAMDONG1', oldestAvailable: '2026-10-12T00:00:00Z', retentionDays: 1, kinds: ['raw'] },
+  ] };
+  const a = findCoverageEntry(cov, 'angiang1');
+  assert.ok(a && a.kinds.includes('after'));
+  const b = findCoverageEntry(cov, 'LAMDONG1');
+  assert.equal(b.retentionDays, 1);
+  assert.equal(findCoverageEntry(cov, 'VTV1'), null);
+  assert.equal(findCoverageEntry(null, 'ANGIANG1'), null);
+  assert.equal(findCoverageEntry({ coverage: [] }, 'ANGIANG1'), null);
+});
+
+test('getTimeshiftCoverage: loi mang -> tra null (fallback), khong throw', async () => {
+  const { getTimeshiftCoverage } = await import('./dist/modules/playback/aio-client.js');
+  // Khong co server AIO o day (key sai) -> phai tra null chu khong throw.
+  const cov = await getTimeshiftCoverage({ baseUrl: 'http://127.0.0.1:1', partnerKey: 'x' });
+  assert.equal(cov, null);
+});

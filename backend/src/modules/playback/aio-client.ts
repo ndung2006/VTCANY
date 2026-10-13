@@ -215,6 +215,60 @@ export async function getTimeshiftPlaylist(
   return aioFetchText(cfg, `/api/timeshift/${encodeURIComponent(channel)}?${q}`);
 }
 
+// ---------------------------------------------------------------------------
+// Timeshift coverage: GET /api/timeshift/coverage -> vung du lieu that.
+// { now, coverage: [{ channel, oldestAvailable (ISO), retentionDays, kinds: ['raw'|'after'] }] }
+// - kinds quyet cach goi: co 'after' -> them ?src=after; chi 'raw' -> goi thuong.
+// - oldestAvailable de kep khung gio, khoi 404 oan (thay vi doan so ngay retention).
+// Cache 1h trong RAM; loi -> tra du lieu cache cu (neu co), khong thi null
+// de caller fallback ve logic DB cu.
+// ---------------------------------------------------------------------------
+export interface TimeshiftCoverageEntry {
+  channel: string;
+  oldestAvailable: string;
+  retentionDays: number;
+  kinds: string[];
+}
+export interface TimeshiftCoverage {
+  now?: string;
+  coverage: TimeshiftCoverageEntry[];
+}
+
+const COVERAGE_TTL_MS = 60 * 60 * 1000;
+let coverageCache: { at: number; data: TimeshiftCoverage } | null = null;
+
+function channelKey(s: string): string {
+  return (s || '').trim().toUpperCase();
+}
+
+export async function getTimeshiftCoverage(cfg: AioConfig): Promise<TimeshiftCoverage | null> {
+  const nowMs = Date.now();
+  if (coverageCache && nowMs - coverageCache.at < COVERAGE_TTL_MS) return coverageCache.data;
+  try {
+    const data = await aioFetch(cfg, '/api/timeshift/coverage');
+    const raw = Array.isArray(data?.coverage) ? data.coverage : [];
+    const coverage: TimeshiftCoverageEntry[] = raw
+      .filter((e: any) => e && typeof e.channel === 'string')
+      .map((e: any) => ({
+        channel: e.channel,
+        oldestAvailable: String(e.oldestAvailable || ''),
+        retentionDays: Number(e.retentionDays) || 0,
+        kinds: Array.isArray(e.kinds) ? e.kinds.map((k: any) => String(k)) : [],
+      }));
+    const result: TimeshiftCoverage = { now: data?.now ? String(data.now) : undefined, coverage };
+    coverageCache = { at: nowMs, data: result };
+    return result;
+  } catch {
+    return coverageCache?.data ?? null;
+  }
+}
+
+export function findCoverageEntry(cov: TimeshiftCoverage | null | undefined, channel: string): TimeshiftCoverageEntry | null {
+  if (!cov?.coverage?.length) return null;
+  const key = channelKey(channel);
+  return cov.coverage.find((e) => channelKey(e.channel) === key) ?? null;
+}
+
 // Dua URI tuong doi ve tuyet doi theo baseUrl cua AIO.
 export function absolutizeUri(uri: string, baseUrl: string): string {
   const u = (uri || '').trim();
