@@ -282,11 +282,13 @@ watch(activeDate, () => {
   if (current.value) pick(current.value);
 });
 // Deep-link tu trang chu: /truyen-hinh?kenh=<public_id> -> tu dong chon + phat ngay.
+// Theo doi ca query (paste URL khi trang da mo / DOI query tu ChannelStrip khi da co current)
+// lan lan groups (lan dau tai xong).
 watch(
-  groups,
-  (g) => {
-    const q = route.query.kenh;
-    if (current.value || typeof q !== 'string' || !q) return;
+  [groups, () => route.query.kenh],
+  ([g, q]) => {
+    if (typeof q !== 'string' || !q) return;
+    if (current.value?.public_id === q) return;
     const hit = g.flatMap((gr) => gr.channels).find((ch) => ch.public_id === q);
     if (hit) void pick(hit);
   },
