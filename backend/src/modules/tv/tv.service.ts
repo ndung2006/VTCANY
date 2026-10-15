@@ -25,6 +25,54 @@ const OVERRIDE_FIELDS = [
   'timeshiftEnabled', 'timeshiftSrc', 'useAioEpg', 'isCustom',
 ] as const;
 
+export interface EpgTimelineCacheItem {
+  time: string;
+  title: string;
+  status: string;
+  startIso?: string;
+  endIso?: string;
+}
+
+interface EpgCacheEntry {
+  day: string; // YYYY-MM-DD (Asia/Ho_Chi_Minh)
+  timeline: EpgTimelineCacheItem[];
+}
+
+// Cache "last-good" EPG AIO theo (kenh + ngay): AIO chap chon tra timeline rong
+// lam mat nut "Xem lai" tren UI du API xem lai van chay. Chi phuc vu trong cung
+// ngay (khong lay lich hom qua gan cho hom nay); het ngay tu xoa (lazy prune).
+const epgLastGoodCache = new Map<string, EpgCacheEntry>();
+
+export function epgCacheKey(name: string, day: string): string {
+  return `${name}|||${day}`;
+}
+
+// Tinh lai trang thai UPCOMING/LIVE/REPLAY theo gio hien tai cho timeline cache
+// (giong cong thuc trong mapEpgSchedule) — lich cu nhung trang thai phai dung.
+export function refreshEpgStatus(
+  timeline: EpgTimelineCacheItem[],
+  now = Date.now(),
+): EpgTimelineCacheItem[] {
+  return timeline.map((it) => {
+    const s = it.startIso ? new Date(it.startIso).getTime() : NaN;
+    const e = it.endIso ? new Date(it.endIso).getTime() : NaN;
+    if (!Number.isFinite(s)) return it;
+    const status = s > now ? 'UPCOMING' : Number.isFinite(e) && e < now ? 'REPLAY' : 'LIVE';
+    return status === it.status ? it : { ...it, status };
+  });
+}
+
+export function pruneEpgCache(todayIso: string): void {
+  for (const [k, v] of epgLastGoodCache) {
+    if (v.day !== todayIso) epgLastGoodCache.delete(k);
+  }
+}
+
+// Cho test: doc/ghi truc tiep cache ma khong qua epg().
+export function __epgCacheStore(): Map<string, EpgCacheEntry> {
+  return epgLastGoodCache;
+}
+
 // Nguồn: kênh live AIO + lịch AIO, fallback lịch local CMS nhập tay.
 // Lop quan tri channel_overrides (Postgres) quyet dinh kenh nao duoc hien thi:
 // an/hien, nhom, thu tu, ten/logo/banner, goi cuoc, nguon phat ghi de, kenh tu them.
@@ -113,13 +161,33 @@ export class TvService {
 
     let timeline: Array<{ time: string; title: string; status: string; startIso?: string; endIso?: string; replay_url?: string | null }> = [];
     let fromAio = false;
-    if (aioEpgAllowed(override)) {
+    const aioAllowed = aioEpgAllowed(override);
+    if (aioAllowed) {
       try {
         const raw = await this.playback.channelSchedule(name, day);
         if (raw) timeline = mapEpgSchedule(raw);
         fromAio = timeline.length > 0;
       } catch {
         timeline = [];
+      }
+    }
+    let epgSource: 'aio' | 'aio-stale' | 'local' = fromAio ? 'aio' : 'local';
+    if (fromAio) {
+      // Luu ban tot nhat de phuc vu khi AIO chap chon (chi luu item co du lieu goc).
+      epgLastGoodCache.set(epgCacheKey(name, day), {
+        day,
+        timeline: timeline.map(({ time, title, status, startIso, endIso }) => ({
+          time, title, status, startIso, endIso,
+        })),
+      });
+    } else if (aioAllowed) {
+      // AIO duoc phep nhung tra rong/loi -> thu cache cung ngay truoc khi roi ve lich local.
+      // Khong dung cache khi admin tat EPG AIO cho kenh (ton trong lua chon cua admin).
+      pruneEpgCache(todayIso);
+      const cached = epgLastGoodCache.get(epgCacheKey(name, day));
+      if (cached && cached.day === day && cached.timeline.length > 0) {
+        timeline = refreshEpgStatus(cached.timeline);
+        epgSource = 'aio-stale';
       }
     }
     if (timeline.length === 0) {
@@ -155,7 +223,7 @@ export class TvService {
         catchup_hls_url: catchupUrl,
       },
       epg_dates: epgDateWindow(),
-      epg_source: fromAio ? 'aio' : 'local',
+      epg_source: epgSource,
       timeline,
     };
   }

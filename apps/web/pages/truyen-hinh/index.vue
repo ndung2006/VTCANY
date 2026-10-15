@@ -73,7 +73,16 @@
         </template>
       </Carousel>
 
-      <h3 class="mb-2 mt-4 text-sm font-bold uppercase text-neutral-300">Lịch phát sóng</h3>
+      <h3 class="mb-2 mt-4 flex items-center gap-2 text-sm font-bold uppercase text-neutral-300">
+        Lịch phát sóng
+        <span
+          v-if="epg?.epg_source === 'aio-stale'"
+          class="rounded bg-amber-600/20 px-1.5 py-0.5 text-[10px] font-semibold normal-case text-amber-400"
+          title="Lịch AIO đang chập chờn, đây là bản tốt nhất đã lưu trong ngày"
+        >
+          Lịch cũ
+        </span>
+      </h3>
       <ul
         v-if="(epg?.timeline ?? []).length"
         ref="epgListEl"
@@ -179,6 +188,7 @@ const radioBg = computed(() =>
 );
 const epg = ref<{
   channel: { hls_url: string | null; hls_exp?: number | null };
+  epg_source?: string;
   timeline: Array<{ time: string; title: string; status: string; replay_url?: string | null }>;
 } | null>(null);
 // Khi xem lai (VOD timeshift), player phat URL nay thay vi live.
