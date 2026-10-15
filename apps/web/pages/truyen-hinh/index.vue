@@ -20,9 +20,9 @@
         {{ current.name }}
         <span v-if="replaySrc" class="flex items-center gap-2 rounded bg-neutral-800 px-2 py-0.5 text-xs font-medium text-neutral-300">
           Đang xem lại: {{ replayTitle }}
-          <button class="text-neutral-400 hover:text-white" title="Về trực tiếp"
-            @click="replaySrc = null; replayTitle = null; playerKey++; pick(current)">
-            <i class="pi pi-times" />
+          <button class="rounded bg-red-600 px-2 py-0.5 text-xs font-semibold text-white hover:bg-red-500"
+            @click="stopReplay()">
+            Về live
           </button>
         </span>
       </h2>
@@ -92,7 +92,10 @@
           v-for="it in epg?.timeline ?? []"
           :key="it.time + it.title"
           class="flex items-center gap-3 rounded-lg px-2 py-1.5 text-sm hover:bg-neutral-800"
-          :class="it.status === 'LIVE' ? 'bg-neutral-800/80' : ''"
+          :class="[
+            it.status === 'LIVE' && !isReplaying(it) ? 'bg-neutral-800/80' : '',
+            isReplaying(it) ? 'bg-amber-600/20 ring-1 ring-amber-500/60' : '',
+          ]"
         >
           <span class="w-12 shrink-0 text-neutral-400">{{ it.time }}</span>
           <span class="min-w-0 flex-1 truncate">{{ it.title }}</span>
@@ -102,8 +105,14 @@
           >
             <span class="h-1.5 w-1.5 rounded-full bg-white" /> LIVE
           </span>
+          <span
+            v-if="isReplaying(it)"
+            class="shrink-0 rounded bg-amber-600 px-2 py-0.5 text-xs font-semibold text-white"
+          >
+            Đang xem
+          </span>
           <button
-            v-if="it.replay_url"
+            v-else-if="it.replay_url"
             class="shrink-0 rounded bg-neutral-700 px-2 py-0.5 text-xs font-medium text-neutral-200 hover:bg-neutral-600"
             @click="playReplay(it)"
           >
@@ -265,6 +274,7 @@ async function pick(c: Channel) {
   current.value = c;
   replaySrc.value = null;
   replayTitle.value = null;
+  replayItemUrl.value = null;
   // Dong bo URL de share/reload giu dung kenh dang xem.
   router.replace({ query: { kenh: c.public_id } });
   epg.value = null;
@@ -280,12 +290,25 @@ async function pick(c: Channel) {
 }
 
 // Xem lai chuong trinh da phat (VOD timeshift): dung refresh live, phat playlist replay.
+const replayItemUrl = ref<string | null>(null);
+function isReplaying(it: { replay_url?: string | null }) {
+  return !!replayItemUrl.value && !!it.replay_url && it.replay_url === replayItemUrl.value;
+}
 function playReplay(it: { title: string; replay_url?: string | null }) {
   if (!it.replay_url || !current.value) return;
   clearRefresh();
   replayTitle.value = it.title;
+  replayItemUrl.value = it.replay_url;
   replaySrc.value = `${config.public.apiBase as string}${it.replay_url}`;
   playerKey.value++;
+}
+// Thoat che do xem lai, quay ve truc tiep.
+function stopReplay() {
+  replaySrc.value = null;
+  replayTitle.value = null;
+  replayItemUrl.value = null;
+  playerKey.value++;
+  if (current.value) pick(current.value);
 }
 
 watch(activeDate, () => {
