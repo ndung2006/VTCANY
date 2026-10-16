@@ -1,7 +1,7 @@
 <template>
   <div class="min-h-screen bg-neutral-950 text-neutral-100">
     <aside class="fixed left-0 top-0 flex h-screen w-60 flex-col border-r border-neutral-800 bg-neutral-900">
-      <NuxtLink to="/" class="flex items-center px-5 py-4">
+      <NuxtLink to="/" class="flex items-center px-5 py-4" @click="onLogoClick">
         <img src="/icons/vtc-any/logo-vtc-any-transparent.svg" alt="VTC ANY" width="156" height="66" />
       </NuxtLink>
 
@@ -43,6 +43,7 @@
 
 <script setup lang="ts">
 const q = ref('');
+const route = useRoute();
 
 const menu = [
   { label: 'Trang chủ', to: '/' },
@@ -55,5 +56,10 @@ const menu = [
 
 function goSearch() {
   navigateTo(`/tim-kiem?s=${encodeURIComponent(q.value.trim())}`);
+}
+
+// Bam logo: ve trang chu; neu dang o san trang chu thi cuon len dau trang.
+function onLogoClick() {
+  if (route.path === '/') window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 </script>
